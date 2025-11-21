@@ -1,0 +1,21 @@
+services:
+  jellyfin-wrapped:
+    build: .
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - NEXT_PORT=3001
+      - JELLYFIN_SERVER_URL=${JELLYFIN_SERVER_URL}
+      - JELLYFIN_API_KEY=${JELLYFIN_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      - API_URL=http://localhost:3000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
