@@ -120,6 +120,78 @@ function setCache(statType, year, data, userId = null, ttlDays = 30) {
 }
 
 /**
+ * Generate cache key with language support (for wrapped insights)
+ */
+function getCacheKeyWithLanguage(statType, year, userId = null, language = 'en') {
+  return `${statType}:${year}:${userId || 'global'}:${language}`;
+}
+
+/**
+ * Get cached wrapped insights (with language support)
+ */
+function getWrappedCache(year, userId = null, language = 'en') {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      resolve(null);
+      return;
+    }
+    
+    try {
+      const cacheKey = getCacheKeyWithLanguage('wrappedInsights', year, userId, language);
+      const now = Date.now();
+      
+      const stmt = db.prepare('SELECT data, expires_at FROM stats_cache WHERE cache_key = ? AND expires_at > ?');
+      const row = stmt.get(cacheKey, now);
+      
+      if (row) {
+        try {
+          const data = JSON.parse(row.data);
+          resolve(data);
+        } catch (parseErr) {
+          console.error('[Cache DB] Error parsing cached wrapped data:', parseErr);
+          resolve(null);
+        }
+      } else {
+        resolve(null);
+      }
+    } catch (err) {
+      console.error('[Cache DB] Error reading wrapped cache:', err);
+      resolve(null);
+    }
+  });
+}
+
+/**
+ * Set cached wrapped insights (with language support)
+ */
+function setWrappedCache(year, data, userId = null, language = 'en', ttlDays = 365) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      resolve();
+      return;
+    }
+    
+    try {
+      const cacheKey = getCacheKeyWithLanguage('wrappedInsights', year, userId, language);
+      const now = Date.now();
+      const expiresAt = now + (ttlDays * 24 * 60 * 60 * 1000);
+      const dataStr = JSON.stringify(data);
+      
+      const stmt = db.prepare(`
+        INSERT OR REPLACE INTO stats_cache (cache_key, stat_type, year, user_id, data, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      stmt.run(cacheKey, 'wrappedInsights', year, userId, dataStr, now, expiresAt);
+      resolve();
+    } catch (err) {
+      console.error('[Cache DB] Error writing wrapped cache:', err);
+      reject(err);
+    }
+  });
+}
+
+/**
  * Invalidate cache for a specific stat type, year, and optionally user
  */
 function invalidateCache(statType, year, userId = null) {
@@ -222,6 +294,8 @@ module.exports = {
   initDatabase,
   getCache,
   setCache,
+  getWrappedCache,
+  setWrappedCache,
   invalidateCache,
   cleanupExpiredEntries,
   getCacheStats,

@@ -1,5 +1,6 @@
 'use client'
 
+import { motion } from 'framer-motion'
 import PodiumItem from './PodiumItem'
 
 interface MediaItem {
@@ -25,8 +26,24 @@ export default function PodiumDisplay({ items, isShow = false }: PodiumDisplayPr
   const orderedItems = [items[1], items[0], items[2]]
   const positions: (1 | 2 | 3)[] = [2, 1, 3]
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.2,
+        delayChildren: 0.1
+      }
+    }
+  }
+
   return (
-    <div className="mb-8 md:mb-12 flex items-end justify-center gap-2 md:gap-4 px-2 md:px-0">
+    <motion.div 
+      className="mb-8 md:mb-12 flex items-end justify-center gap-2 md:gap-4 px-2 md:px-0"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
       {orderedItems.map((item, index) => {
         const position = positions[index]
         return (
@@ -38,7 +55,7 @@ export default function PodiumDisplay({ items, isShow = false }: PodiumDisplayPr
           />
         )
       })}
-    </div>
+    </motion.div>
   )
 }
 

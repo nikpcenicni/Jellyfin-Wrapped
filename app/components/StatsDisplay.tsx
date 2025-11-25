@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import { motion } from 'framer-motion'
 import TotalWatchTimeCard from './TotalWatchTimeCard'
 import MediaSection from './MediaSection'
 import UserRanking from './UserRanking'
@@ -29,6 +30,7 @@ interface Stats {
   }
   topGenres?: Array<{ genre: string; count: number }> | null
   topMovieYears?: Array<{ year: number; count: number }> | null
+  userRanking?: any
 }
 
 interface StatsDisplayProps {
@@ -38,52 +40,103 @@ interface StatsDisplayProps {
   year?: number
 }
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.15,
+      delayChildren: 0.1
+    }
+  }
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0
+  }
+}
+
 export default function StatsDisplay({ stats, showPersonalized = false, userId = null, year }: StatsDisplayProps) {
   const t = useTranslations()
-  const [isVisible, setIsVisible] = useState(false)
-
-  useEffect(() => {
-    // Trigger fade-in after component mounts
-    setTimeout(() => {
-      setIsVisible(true)
-    }, 100)
-  }, [])
-
   const totalWatchTime = stats.totalWatchTime?.[0] || {}
 
   return (
-    <div className={`space-y-6 md:space-y-10 transition-opacity duration-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
-      {/* User Ranking - Only show when personalized */}
-      {showPersonalized && userId && year && (
-        <UserRanking year={year} userId={userId} />
-      )}
-
-      {/* Total Watch Time Card */}
+    <motion.div 
+      className="space-y-6 md:space-y-10"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
+      {/* ============================================ */}
+      {/* SECTION 1: OVERVIEW & SUMMARY STATISTICS */}
+      {/* ============================================ */}
+      
+      {/* Total Watch Time Card - Overall summary first */}
       {totalWatchTime && (
-        <TotalWatchTimeCard totalWatchTime={totalWatchTime} />
+        <motion.div 
+          variants={itemVariants}
+          transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+        >
+          <TotalWatchTimeCard totalWatchTime={totalWatchTime} />
+        </motion.div>
       )}
 
+      {/* User Ranking - Only show when personalized, after total watch time */}
+      {showPersonalized && userId && year && (
+        <motion.div 
+          variants={itemVariants}
+          transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+        >
+          <UserRanking year={year} userId={userId} rankingData={stats.userRanking} />
+        </motion.div>
+      )}
+
+      {/* ============================================ */}
+      {/* SECTION 2: TOP CONTENT */}
+      {/* ============================================ */}
+      
       {/* Top Movies */}
-      <MediaSection
-        title={t('stats.topMovies')}
-        icon="🎥"
-        items={stats.topMovies || []}
-        isShow={false}
-        hoverColor="jellyfin-blue"
-      />
+      <motion.div 
+        variants={itemVariants}
+        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+      >
+        <MediaSection
+          title={t('stats.topMovies')}
+          icon="🎥"
+          items={stats.topMovies || []}
+          isShow={false}
+          hoverColor="jellyfin-blue"
+        />
+      </motion.div>
 
       {/* Top TV Shows */}
-      <MediaSection
-        title={t('stats.topShows')}
-        icon="📺"
-        items={stats.topShows || []}
-        isShow={true}
-        hoverColor="purple"
-      />
+      <motion.div 
+        variants={itemVariants}
+        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+      >
+        <MediaSection
+          title={t('stats.topShows')}
+          icon="📺"
+          items={stats.topShows || []}
+          isShow={true}
+          hoverColor="purple"
+        />
+      </motion.div>
 
+      {/* ============================================ */}
+      {/* SECTION 3: COMPARISONS & PREFERENCES */}
+      {/* ============================================ */}
+      
       {/* Movies vs Shows Comparison */}
       {stats.preferredMediaType && (
-        <div className="bg-gray-800/60 backdrop-blur-sm rounded-xl md:rounded-2xl p-4 md:p-8 border border-gray-700/50 shadow-xl">
+        <motion.div 
+          className="bg-gray-800/60 backdrop-blur-sm rounded-xl md:rounded-2xl p-4 md:p-8 border border-gray-700/50 shadow-xl"
+          variants={itemVariants}
+          transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+        >
           <h2 className="text-2xl md:text-3xl font-bold text-white mb-4 md:mb-8 flex items-center gap-2 md:gap-3">
             <span className="text-3xl md:text-4xl">⚖️</span>
             {t('stats.moviesVsShows')}
@@ -138,21 +191,33 @@ export default function StatsDisplay({ stats, showPersonalized = false, userId =
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Top Genres */}
       {stats.topGenres && stats.topGenres.length > 0 && (
-        <div className="bg-gray-800/60 backdrop-blur-sm rounded-xl md:rounded-2xl p-4 md:p-8 border border-gray-700/50 shadow-xl">
+        <motion.div 
+          className="bg-gray-800/60 backdrop-blur-sm rounded-xl md:rounded-2xl p-4 md:p-8 border border-gray-700/50 shadow-xl"
+          variants={itemVariants}
+          transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+        >
           <h2 className="text-2xl md:text-3xl font-bold text-white mb-4 md:mb-8 flex items-center gap-2 md:gap-3">
             <span className="text-3xl md:text-4xl">🎭</span>
             {t('stats.topGenres')}
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
+          <motion.div 
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
             {stats.topGenres.map((genre, index) => (
-              <div
+              <motion.div
                 key={genre.genre || index}
                 className="bg-gradient-to-br from-gray-900/60 to-gray-900/40 rounded-lg md:rounded-xl p-4 md:p-6 hover:from-gray-900/80 hover:to-gray-900/60 hover:scale-105 hover:shadow-lg border border-gray-700/30 hover:border-jellyfin-blue/50 backdrop-blur-sm"
+                variants={itemVariants}
+                whileHover={{ scale: 1.05, y: -5 }}
+                transition={{ type: "spring", stiffness: 300 }}
               >
                 <div className="text-gray-400 text-xs md:text-sm mb-2 font-medium">
                   #{index + 1}
@@ -163,24 +228,36 @@ export default function StatsDisplay({ stats, showPersonalized = false, userId =
                 <div className="text-gray-300 text-sm md:text-base">
                   {genre.count?.toLocaleString() || 0} <span className="text-xs text-gray-500">{t('common.plays')}</span>
                 </div>
-              </div>
+              </motion.div>
             ))}
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
 
       {/* Top Movie Years */}
       {stats.topMovieYears && stats.topMovieYears.length > 0 && (
-        <div className="bg-gray-800/60 backdrop-blur-sm rounded-xl md:rounded-2xl p-4 md:p-8 border border-gray-700/50 shadow-xl">
+        <motion.div 
+          className="bg-gray-800/60 backdrop-blur-sm rounded-xl md:rounded-2xl p-4 md:p-8 border border-gray-700/50 shadow-xl"
+          variants={itemVariants}
+          transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+        >
           <h2 className="text-2xl md:text-3xl font-bold text-white mb-4 md:mb-8 flex items-center gap-2 md:gap-3">
             <span className="text-3xl md:text-4xl">📆</span>
             {t('stats.mostPopularMovieYears')}
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
+          <motion.div 
+            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
             {stats.topMovieYears.map((yearData, index) => (
-              <div
+              <motion.div
                 key={yearData.year || index}
                 className="bg-gradient-to-br from-gray-900/60 to-gray-900/40 rounded-lg md:rounded-xl p-4 md:p-6 hover:from-gray-900/80 hover:to-gray-900/60 hover:scale-105 hover:shadow-lg border border-gray-700/30 hover:border-jellyfin-blue/50 backdrop-blur-sm"
+                variants={itemVariants}
+                whileHover={{ scale: 1.05, y: -5 }}
+                transition={{ type: "spring", stiffness: 300 }}
               >
                 <div className="text-gray-400 text-xs md:text-sm mb-2 font-medium">
                   #{index + 1}
@@ -191,24 +268,40 @@ export default function StatsDisplay({ stats, showPersonalized = false, userId =
                 <div className="text-gray-300 text-sm md:text-base">
                   {yearData.count?.toLocaleString() || 0} <span className="text-xs text-gray-500">{t('common.plays')}</span>
                 </div>
-              </div>
+              </motion.div>
             ))}
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
 
+      {/* ============================================ */}
+      {/* SECTION 4: TEMPORAL/ACTIVITY DATA */}
+      {/* ============================================ */}
+      
       {/* Monthly Activity */}
       {stats.monthlyActivity && stats.monthlyActivity.length > 0 && (
-        <div className="bg-gray-800/60 backdrop-blur-sm rounded-xl md:rounded-2xl p-4 md:p-8 border border-gray-700/50 shadow-xl">
+        <motion.div 
+          className="bg-gray-800/60 backdrop-blur-sm rounded-xl md:rounded-2xl p-4 md:p-8 border border-gray-700/50 shadow-xl"
+          variants={itemVariants}
+          transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+        >
           <h2 className="text-2xl md:text-3xl font-bold text-white mb-4 md:mb-8 flex items-center gap-2 md:gap-3">
             <span className="text-3xl md:text-4xl">📅</span>
             {t('stats.monthlyActivity')}
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 md:gap-4">
+          <motion.div 
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 md:gap-4"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
             {stats.monthlyActivity.map((month, index) => (
-              <div
+              <motion.div
                 key={month.Month || index}
                 className="bg-gradient-to-br from-gray-900/60 to-gray-900/40 rounded-lg md:rounded-xl p-4 md:p-6 hover:from-gray-900/80 hover:to-gray-900/60 hover:scale-105 hover:shadow-lg border border-gray-700/30 hover:border-jellyfin-blue/50 backdrop-blur-sm"
+                variants={itemVariants}
+                whileHover={{ scale: 1.05, y: -5 }}
+                transition={{ type: "spring", stiffness: 300 }}
               >
                 <div className="text-gray-400 text-xs md:text-sm mb-2 md:mb-3 font-medium">
                   {new Date(month.Month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
@@ -219,11 +312,11 @@ export default function StatsDisplay({ stats, showPersonalized = false, userId =
                 <div className="text-gray-300 text-xs md:text-sm flex items-center gap-1">
                   <span>⏱️</span> {formatDuration(month.TotalSeconds || 0)}
                 </div>
-              </div>
+              </motion.div>
             ))}
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   )
 }

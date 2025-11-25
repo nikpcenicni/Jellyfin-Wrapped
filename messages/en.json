@@ -68,6 +68,22 @@
     "message2": "Everyone consumed {hours}",
     "message3": "That's {plays} total plays",
     "message4": "From {items} unique items"
+  },
+  "wrapped": {
+    "startExperience": "Start Your Wrapped",
+    "generating": "Generating your personalized review...",
+    "errorGenerating": "Error generating your review. Please try again.",
+    "skip": "Skip",
+    "tapToContinue": "Tap anywhere or press any key to continue"
+  },
+  "comingSoon": {
+    "title": "Coming Soon",
+    "message": "Your {year} Wrapped will be available soon!",
+    "subtitle": "Check back on the last Friday of November to see your year in review.",
+    "days": "Days",
+    "hours": "Hours",
+    "minutes": "Minutes",
+    "seconds": "Seconds"
   }
 }
 

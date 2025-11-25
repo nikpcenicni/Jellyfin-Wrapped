@@ -1,10 +1,10 @@
 const config = require('../config');
 const { executeQuery, executeQueryForUser } = require('../services/jellyfin/queries');
 const { enrichItemsWithPosters } = require('../services/images/posters');
-const { generateIntroMessages } = require('../services/ai/openai');
+const { generateIntroMessages, generateWrappedInsights } = require('../services/ai/openai');
 const { getItemDetails } = require('../services/jellyfin/items');
 const { transformToObjects, deduplicateShows, validateAndSanitizeUserId } = require('../utils/transform');
-const { getCache, setCache } = require('../services/cache/database');
+const { getCache, setCache, getWrappedCache, setWrappedCache } = require('../services/cache/database');
 const {
   buildTopMoviesQuery,
   buildTopShowsQuery,
@@ -33,6 +33,70 @@ const EMBY_AUTHORIZATION_HEADER = 'MediaBrowser Client="Jellyfin Wrapped", Devic
 
 // Helper Functions
 const getYearFromQuery = (query) => parseInt(query.year) || new Date().getFullYear();
+
+/**
+ * Calculate the last Friday of November for a given year
+ * @param {number} year - The year to calculate for
+ * @returns {Date} Date object representing the last Friday of November
+ */
+const getLastFridayOfNovember = (year) => {
+  // Start with November 30th
+  const nov30 = new Date(year, 10, 30); // Month is 0-indexed, so 10 = November
+  
+  // Get the day of the week (0 = Sunday, 1 = Monday, ..., 5 = Friday, 6 = Saturday)
+  const dayOfWeek = nov30.getDay();
+  
+  // Calculate how many days to subtract to get to Friday
+  // If Nov 30 is Friday (5), subtract 0
+  // If Nov 30 is Saturday (6), subtract 1
+  // If Nov 30 is Sunday (0), subtract 2
+  // If Nov 30 is Monday (1), subtract 3
+  // If Nov 30 is Tuesday (2), subtract 4
+  // If Nov 30 is Wednesday (3), subtract 5
+  // If Nov 30 is Thursday (4), subtract 6
+  let daysToSubtract;
+  if (dayOfWeek === 5) {
+    // Friday - no subtraction needed
+    daysToSubtract = 0;
+  } else if (dayOfWeek === 6) {
+    // Saturday - go back 1 day
+    daysToSubtract = 1;
+  } else {
+    // Sunday through Thursday - go back (dayOfWeek + 2) days
+    daysToSubtract = dayOfWeek + 2;
+  }
+  
+  const lastFriday = new Date(nov30);
+  lastFriday.setDate(nov30.getDate() - daysToSubtract);
+  
+  return lastFriday;
+};
+
+/**
+ * Check if the current year's wrapped is locked (before last Friday of November)
+ * @param {number} year - The year to check
+ * @returns {{locked: boolean, unlockDate: Date|null}} Object indicating if locked and unlock date
+ */
+const isYearLocked = (year) => {
+  const currentYear = new Date().getFullYear();
+  
+  // Only lock the current year
+  if (year !== currentYear) {
+    return { locked: false, unlockDate: null };
+  }
+  
+  const lastFriday = getLastFridayOfNovember(year);
+  const now = new Date();
+  
+  // Set time to end of day (23:59:59) for comparison
+  const unlockDate = new Date(lastFriday);
+  unlockDate.setHours(23, 59, 59, 999);
+  
+  return {
+    locked: now < unlockDate,
+    unlockDate: unlockDate
+  };
+};
 
 const handleError = (res, error, defaultMessage, statusCode = 500) => {
   console.error(defaultMessage, error);
@@ -184,6 +248,59 @@ const handleIntro = async (req, res) => {
     res.json({ messages: messages || [] });
   } catch (error) {
     handleError(res, error, 'Failed to generate intro messages');
+  }
+};
+
+const handleWrappedInsights = async (req, res) => {
+  try {
+    const { stats, language, userName, userId } = req.body;
+
+    if (!stats) {
+      return res.status(400).json({ error: 'Stats data is required' });
+    }
+
+    const lang = language || 'en';
+    const year = stats.year || new Date().getFullYear();
+    const lockCheck = isYearLocked(year);
+    
+    if (lockCheck.locked) {
+      const unlockDateStr = lockCheck.unlockDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      return res.status(403).json({ 
+        error: 'Wrapped for the current year is locked',
+        message: `Wrapped statistics for ${year} will be available starting on the last Friday of November (${unlockDateStr}).`,
+        unlockDate: lockCheck.unlockDate.toISOString()
+      });
+    }
+    
+    const cacheUserId = userId || null;
+
+    // Check cache first
+    const cached = await getWrappedCache(year, cacheUserId, lang);
+    if (cached && cached.slides && Array.isArray(cached.slides) && cached.slides.length > 0) {
+      console.log(`[Wrapped Cache] Hit for year: ${year}, user: ${cacheUserId || 'global'}, lang: ${lang}`);
+      return res.json({ slides: cached.slides, cached: true });
+    }
+
+    console.log(`[Wrapped Cache] Miss for year: ${year}, user: ${cacheUserId || 'global'}, lang: ${lang}`);
+    
+    // Generate new insights
+    const insights = await generateWrappedInsights(stats, lang, userName);
+
+    if (insights && insights.length > 0) {
+      // Cache the insights (1 year TTL since wrapped is yearly)
+      await setWrappedCache(year, { slides: insights }, cacheUserId, lang, 365).catch(err => {
+        console.error('[Wrapped Cache] Failed to cache insights:', err);
+      });
+    }
+
+    res.json({ slides: insights || [], cached: false });
+  } catch (error) {
+    handleError(res, error, 'Failed to generate wrapped insights');
   }
 };
 
@@ -452,6 +569,22 @@ const fetchStatsData = async (year, userId = null, accessToken = null) => {
 const handleStats = async (req, res) => {
   try {
     const year = getYearFromQuery(req.query);
+    const lockCheck = isYearLocked(year);
+    
+    if (lockCheck.locked) {
+      const unlockDateStr = lockCheck.unlockDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      return res.status(403).json({ 
+        error: 'Wrapped for the current year is locked',
+        message: `Wrapped statistics for ${year} will be available starting on the last Friday of November (${unlockDateStr}).`,
+        unlockDate: lockCheck.unlockDate.toISOString()
+      });
+    }
+    
     const stats = await fetchStatsData(year);
     res.json(stats);
   } catch (error) {
@@ -478,6 +611,22 @@ const handlePersonalStats = async (req, res) => {
     }
 
     const year = getYearFromQuery(req.query);
+    const lockCheck = isYearLocked(year);
+    
+    if (lockCheck.locked) {
+      const unlockDateStr = lockCheck.unlockDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      return res.status(403).json({ 
+        error: 'Wrapped for the current year is locked',
+        message: `Wrapped statistics for ${year} will be available starting on the last Friday of November (${unlockDateStr}).`,
+        unlockDate: lockCheck.unlockDate.toISOString()
+      });
+    }
+    
     const stats = await fetchStatsData(year, validation.sanitized, accessToken);
     
     res.json({
@@ -508,6 +657,21 @@ const handleUserRanking = async (req, res) => {
     }
 
     const year = getYearFromQuery(req.query);
+    const lockCheck = isYearLocked(year);
+    
+    if (lockCheck.locked) {
+      const unlockDateStr = lockCheck.unlockDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      return res.status(403).json({ 
+        error: 'Wrapped for the current year is locked',
+        message: `Wrapped statistics for ${year} will be available starting on the last Friday of November (${unlockDateStr}).`,
+        unlockDate: lockCheck.unlockDate.toISOString()
+      });
+    }
     
     // Build and execute ranking queries
     const queries = {
@@ -573,6 +737,22 @@ const handleUserRanking = async (req, res) => {
 const handleStatTotalWatchTime = async (req, res) => {
   try {
     const year = getYearFromQuery(req.query);
+    const lockCheck = isYearLocked(year);
+    
+    if (lockCheck.locked) {
+      const unlockDateStr = lockCheck.unlockDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      return res.status(403).json({ 
+        error: 'Wrapped for the current year is locked',
+        message: `Wrapped statistics for ${year} will be available starting on the last Friday of November (${unlockDateStr}).`,
+        unlockDate: lockCheck.unlockDate.toISOString()
+      });
+    }
+    
     const authHeader = req.headers.authorization;
     const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
@@ -594,6 +774,22 @@ const handleStatTotalWatchTime = async (req, res) => {
 const handleStatMonthlyActivity = async (req, res) => {
   try {
     const year = getYearFromQuery(req.query);
+    const lockCheck = isYearLocked(year);
+    
+    if (lockCheck.locked) {
+      const unlockDateStr = lockCheck.unlockDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      return res.status(403).json({ 
+        error: 'Wrapped for the current year is locked',
+        message: `Wrapped statistics for ${year} will be available starting on the last Friday of November (${unlockDateStr}).`,
+        unlockDate: lockCheck.unlockDate.toISOString()
+      });
+    }
+    
     const authHeader = req.headers.authorization;
     const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
@@ -615,6 +811,22 @@ const handleStatMonthlyActivity = async (req, res) => {
 const handleStatTopMovies = async (req, res) => {
   try {
     const year = getYearFromQuery(req.query);
+    const lockCheck = isYearLocked(year);
+    
+    if (lockCheck.locked) {
+      const unlockDateStr = lockCheck.unlockDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      return res.status(403).json({ 
+        error: 'Wrapped for the current year is locked',
+        message: `Wrapped statistics for ${year} will be available starting on the last Friday of November (${unlockDateStr}).`,
+        unlockDate: lockCheck.unlockDate.toISOString()
+      });
+    }
+    
     const authHeader = req.headers.authorization;
     const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
@@ -636,6 +848,22 @@ const handleStatTopMovies = async (req, res) => {
 const handleStatTopShows = async (req, res) => {
   try {
     const year = getYearFromQuery(req.query);
+    const lockCheck = isYearLocked(year);
+    
+    if (lockCheck.locked) {
+      const unlockDateStr = lockCheck.unlockDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      return res.status(403).json({ 
+        error: 'Wrapped for the current year is locked',
+        message: `Wrapped statistics for ${year} will be available starting on the last Friday of November (${unlockDateStr}).`,
+        unlockDate: lockCheck.unlockDate.toISOString()
+      });
+    }
+    
     const authHeader = req.headers.authorization;
     const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
@@ -657,6 +885,22 @@ const handleStatTopShows = async (req, res) => {
 const handleStatMediaTypeComparison = async (req, res) => {
   try {
     const year = getYearFromQuery(req.query);
+    const lockCheck = isYearLocked(year);
+    
+    if (lockCheck.locked) {
+      const unlockDateStr = lockCheck.unlockDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      return res.status(403).json({ 
+        error: 'Wrapped for the current year is locked',
+        message: `Wrapped statistics for ${year} will be available starting on the last Friday of November (${unlockDateStr}).`,
+        unlockDate: lockCheck.unlockDate.toISOString()
+      });
+    }
+    
     const authHeader = req.headers.authorization;
     const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
@@ -678,6 +922,22 @@ const handleStatMediaTypeComparison = async (req, res) => {
 const handleStatTopGenres = async (req, res) => {
   try {
     const year = getYearFromQuery(req.query);
+    const lockCheck = isYearLocked(year);
+    
+    if (lockCheck.locked) {
+      const unlockDateStr = lockCheck.unlockDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      return res.status(403).json({ 
+        error: 'Wrapped for the current year is locked',
+        message: `Wrapped statistics for ${year} will be available starting on the last Friday of November (${unlockDateStr}).`,
+        unlockDate: lockCheck.unlockDate.toISOString()
+      });
+    }
+    
     const authHeader = req.headers.authorization;
     const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
@@ -699,6 +959,22 @@ const handleStatTopGenres = async (req, res) => {
 const handleStatTopMovieYears = async (req, res) => {
   try {
     const year = getYearFromQuery(req.query);
+    const lockCheck = isYearLocked(year);
+    
+    if (lockCheck.locked) {
+      const unlockDateStr = lockCheck.unlockDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      return res.status(403).json({ 
+        error: 'Wrapped for the current year is locked',
+        message: `Wrapped statistics for ${year} will be available starting on the last Friday of November (${unlockDateStr}).`,
+        unlockDate: lockCheck.unlockDate.toISOString()
+      });
+    }
+    
     const authHeader = req.headers.authorization;
     const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
@@ -839,6 +1115,7 @@ function attachRoutes(app) {
   // Health & Utility Routes
   app.get('/api/health', handleHealthCheck);
   app.post('/api/intro', handleIntro);
+  app.post('/api/wrapped/insights', handleWrappedInsights);
   app.get('/api/image', handleImageProxy);
 
   // Statistics Routes

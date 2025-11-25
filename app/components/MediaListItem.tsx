@@ -1,5 +1,6 @@
 'use client'
 
+import { motion } from 'framer-motion'
 import PosterImage from './PosterImage'
 import { formatDuration } from './utils'
 
@@ -31,7 +32,11 @@ export default function MediaListItem({ item, rank, isShow = false, hoverColor =
   const hoverClass = HOVER_COLORS[hoverColor as keyof typeof HOVER_COLORS] || HOVER_COLORS['jellyfin-blue']
 
   return (
-    <div className={`flex items-center gap-3 md:gap-4 bg-gray-800/40 backdrop-blur-sm rounded-lg md:rounded-xl p-3 md:p-4 border border-gray-700/30 ${hoverClass} hover:bg-gray-800/60 transition-all`}>
+    <motion.div 
+      className={`flex items-center gap-3 md:gap-4 bg-gray-800/40 backdrop-blur-sm rounded-lg md:rounded-xl p-3 md:p-4 border border-gray-700/30 ${hoverClass} hover:bg-gray-800/60 transition-all`}
+      whileHover={{ scale: 1.02, x: 5 }}
+      transition={{ type: "spring", stiffness: 300 }}
+    >
       {/* Ranking Number */}
       <div className="flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-700/50 flex items-center justify-center text-white font-bold text-sm md:text-base">
         {rank}
@@ -57,7 +62,7 @@ export default function MediaListItem({ item, rank, isShow = false, hoverColor =
           <span>⏱️ {formatDuration(item.TotalPlayDuration || 0)}</span>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
 

@@ -1,5 +1,6 @@
 'use client'
 
+import { motion } from 'framer-motion'
 import PosterImage from './PosterImage'
 import { formatDuration } from './utils'
 
@@ -45,6 +46,15 @@ const PODIUM_CONFIG = {
   }
 }
 
+const itemVariants = {
+  hidden: { opacity: 0, y: 50, scale: 0.8 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1
+  }
+}
+
 export default function PodiumItem({ item, position, isShow = false }: PodiumItemProps) {
   const config = PODIUM_CONFIG[position]
   const title = item.ItemName || item.SeriesName || 'Unknown'
@@ -52,7 +62,12 @@ export default function PodiumItem({ item, position, isShow = false }: PodiumIte
   const playIcon = isShow ? '📼' : '▶️'
 
   return (
-    <div className={`flex flex-col items-center flex-1 ${config.maxWidth}`}>
+    <motion.div 
+      className={`flex flex-col items-center flex-1 ${config.maxWidth}`}
+      variants={itemVariants}
+      whileHover={{ scale: 1.05, y: -10 }}
+      transition={{ duration: 0.6, type: "spring" as const, stiffness: 100 }}
+    >
       <div className={`relative w-full aspect-[2/3] rounded-xl md:rounded-2xl overflow-hidden shadow-2xl mb-2 transform ${config.translateY}`}>
         <PosterImage
           src={item.PosterUrl}
@@ -77,7 +92,7 @@ export default function PodiumItem({ item, position, isShow = false }: PodiumIte
           <div>⏱️ {formatDuration(item.TotalPlayDuration || 0)}</div>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
 

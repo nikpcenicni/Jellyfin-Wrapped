@@ -303,7 +303,250 @@ Return a JSON object with a "messages" array containing exactly 4 strings. Examp
   }
 }
 
+/**
+ * Generate wrapped insights for a 30-second review experience
+ * @param {Object} stats - Statistics object with all user data
+ * @param {string} language - Language code (en, de, es, fr)
+ * @param {string} userName - User's name (optional)
+ * @returns {Promise<Array<Object>>} Array of slide objects with insights
+ */
+async function generateWrappedInsights(stats, language = 'en', userName = null) {
+  // Default to static insights if OpenAI is not available
+  if (!hasValidApiKey() || !openai) {
+    return getFallbackWrappedInsights(stats, language, userName);
+  }
+
+  try {
+    const totalWatchTime = stats.totalWatchTime?.[0] || {};
+    const totalHours = Math.round(totalWatchTime.TotalHours || 0);
+    const totalPlays = totalWatchTime.TotalPlays || 0;
+    const uniqueItems = totalWatchTime.UniqueItems || 0;
+    const year = stats.year || new Date().getFullYear();
+    
+    // Extract additional stats
+    const topMovies = (stats.topMovies || []).slice(0, 5);
+    const topShows = (stats.topShows || []).slice(0, 5);
+    const topGenres = (stats.topGenres || []).slice(0, 5);
+    const monthlyActivity = stats.monthlyActivity || [];
+    const preferredMediaType = stats.preferredMediaType;
+    
+    // Find peak month
+    const peakMonth = monthlyActivity.length > 0 
+      ? monthlyActivity.reduce((max, month) => 
+          (month.PlayCount || 0) > (max.PlayCount || 0) ? month : max
+        )
+      : null;
+    
+    // Language mapping for prompts
+    const languageNames = {
+      en: 'English',
+      de: 'German',
+      es: 'Spanish',
+      fr: 'French'
+    };
+    
+    const langName = languageNames[language] || 'English';
+    
+    // Build comprehensive prompt
+    const statsSummary = {
+      totalHours,
+      totalPlays,
+      uniqueItems,
+      topMovies: topMovies.map(m => m.Name || m.ItemName).filter(Boolean),
+      topShows: topShows.map(s => s.Name || s.ItemName).filter(Boolean),
+      topGenres: topGenres.map(g => g.genre).filter(Boolean),
+      preferredMediaType: preferredMediaType?.type || null,
+      peakMonth: peakMonth ? new Date(peakMonth.Month + '-01').toLocaleDateString(language, { month: 'long' }) : null,
+      peakMonthPlays: peakMonth?.PlayCount || 0
+    };
+    
+    const prompt = `You are creating a fun, engaging "Year in Review" experience (like Spotify Wrapped) for a media server user. Generate 8-10 creative slides that analyze their viewing habits, preferences, and provide fun insights.
+
+User: ${userName || 'the user'}
+Year: ${year}
+Language: Generate all text in ${langName}
+
+Statistics:
+- Total watch time: ${totalHours} hours
+- Total plays: ${totalPlays.toLocaleString()}
+- Unique items: ${uniqueItems.toLocaleString()}
+- Top movies: ${statsSummary.topMovies.join(', ') || 'None'}
+- Top shows: ${statsSummary.topShows.join(', ') || 'None'}
+- Top genres: ${statsSummary.topGenres.join(', ') || 'None'}
+- Preferred media type: ${statsSummary.preferredMediaType || 'Balanced'}
+- Peak viewing month: ${statsSummary.peakMonth || 'N/A'} (${statsSummary.peakMonthPlays} plays)
+
+Create slides that:
+1. Welcome slide - "Your ${year} Wrapped" style
+2. Total watch time with fun comparison
+3. Top movie/show with personality insight
+4. Genre analysis - "Your vibe is..."
+5. Peak month analysis - "You were really into it in [month]"
+6. Media type preference - "You're a [movies/shows] person"
+7. Unique items - "You explored [X] different titles"
+8. Fun habit insight - something quirky about their viewing patterns
+9. Closing slide - "Thanks for watching in ${year}"
+
+Each slide should have:
+- A title (short, catchy, 3-6 words)
+- A main insight/description (1-2 sentences, fun and engaging)
+- Optional: a fun fact or comparison
+
+Return a JSON object with a "slides" array. Each slide should have:
+- "title": string (short, catchy)
+- "description": string (main insight, 1-2 sentences)
+- "funFact": string (optional, fun comparison or fact)
+
+Example format:
+{
+  "slides": [
+    {
+      "title": "Your ${year} Wrapped",
+      "description": "Let's see what kept you entertained this year!",
+      "funFact": null
+    },
+    {
+      "title": "You Watched ${totalHours} Hours",
+      "description": "That's enough time to watch every episode of The Office ${Math.floor(totalHours / 100)} times!",
+      "funFact": "That's ${Math.floor(totalHours / 24)} full days of content"
+    }
+  ]
+}
+
+Generate 8-10 slides total. Make them fun, personal, and celebrate their viewing habits!`;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a creative copywriter specializing in fun, engaging "Year in Review" experiences like Spotify Wrapped. Always return valid JSON objects with a "slides" array. Generate all text in ${langName}. Make insights fun, personal, and celebratory.`
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.9,
+      max_tokens: 1500,
+      response_format: { type: 'json_object' }
+    });
+
+    const responseText = completion.choices[0]?.message?.content;
+    if (!responseText) {
+      return getFallbackWrappedInsights(stats, language, userName);
+    }
+
+    const parsed = JSON.parse(responseText);
+    let slides = null;
+    
+    if (parsed.slides && Array.isArray(parsed.slides)) {
+      slides = parsed.slides;
+    } else if (Array.isArray(parsed)) {
+      slides = parsed;
+    } else {
+      const values = Object.values(parsed);
+      const arrayValue = values.find(v => Array.isArray(v));
+      if (arrayValue) {
+        slides = arrayValue;
+      }
+    }
+
+    if (slides && Array.isArray(slides) && slides.length >= 5) {
+      return slides.slice(0, 10); // Max 10 slides
+    }
+
+    return getFallbackWrappedInsights(stats, language, userName);
+  } catch (error) {
+    console.error('Error generating wrapped insights with OpenAI:', error.message);
+    return getFallbackWrappedInsights(stats, language, userName);
+  }
+}
+
+/**
+ * Get fallback wrapped insights when OpenAI is not available
+ */
+function getFallbackWrappedInsights(stats, language = 'en', userName = null) {
+  const totalWatchTime = stats.totalWatchTime?.[0] || {};
+  const totalHours = Math.round(totalWatchTime.TotalHours || 0);
+  const totalPlays = totalWatchTime.TotalPlays || 0;
+  const uniqueItems = totalWatchTime.UniqueItems || 0;
+  const year = stats.year || new Date().getFullYear();
+  
+  const topMovie = (stats.topMovies || [])[0];
+  const topShow = (stats.topShows || [])[0];
+  const topGenre = (stats.topGenres || [])[0];
+  const preferredMediaType = stats.preferredMediaType?.type;
+  
+  // Find peak month
+  const monthlyActivity = stats.monthlyActivity || [];
+  const peakMonth = monthlyActivity.length > 0 
+    ? monthlyActivity.reduce((max, month) => 
+        (month.PlayCount || 0) > (max.PlayCount || 0) ? month : max
+      )
+    : null;
+  
+  // English fallback (can be extended for other languages)
+  const slides = [
+    {
+      title: `Your ${year} Wrapped`,
+      description: userName 
+        ? `${userName}, let's see what kept you entertained this year!`
+        : `Let's see what kept you entertained this year!`,
+      funFact: null
+    },
+    {
+      title: `${totalHours} Hours Watched`,
+      description: `You spent ${totalHours} hours watching content. That's dedication!`,
+      funFact: `That's ${Math.floor(totalHours / 24)} full days of entertainment`
+    },
+    {
+      title: `${totalPlays.toLocaleString()} Plays`,
+      description: `You hit play ${totalPlays.toLocaleString()} times. The remote control got a workout!`,
+      funFact: null
+    },
+    ...(topMovie ? [{
+      title: `Your Top Movie`,
+      description: `${topMovie.Name || topMovie.ItemName} was your most-watched movie.`,
+      funFact: null
+    }] : []),
+    ...(topShow ? [{
+      title: `Your Top Show`,
+      description: `${topShow.Name || topShow.ItemName} was your favorite series.`,
+      funFact: null
+    }] : []),
+    ...(topGenre ? [{
+      title: `Your Vibe`,
+      description: `${topGenre.genre} was your go-to genre this year.`,
+      funFact: null
+    }] : []),
+    ...(preferredMediaType ? [{
+      title: `You're a ${preferredMediaType} Person`,
+      description: `You preferred ${preferredMediaType.toLowerCase()} over the other format.`,
+      funFact: null
+    }] : []),
+    {
+      title: `${uniqueItems.toLocaleString()} Unique Titles`,
+      description: `You explored ${uniqueItems.toLocaleString()} different titles. Variety is the spice of life!`,
+      funFact: null
+    },
+    ...(peakMonth ? [{
+      title: `Peak Month`,
+      description: `${new Date(peakMonth.Month + '-01').toLocaleDateString('en-US', { month: 'long' })} was your most active month with ${peakMonth.PlayCount} plays.`,
+      funFact: null
+    }] : []),
+    {
+      title: `Thanks for Watching!`,
+      description: `Here's to another year of great entertainment in ${year + 1}!`,
+      funFact: null
+    }
+  ];
+  
+  return slides.slice(0, 10);
+}
+
 module.exports = {
   generateIntroMessages,
+  generateWrappedInsights,
 };
 

@@ -68,6 +68,22 @@
     "message2": "Tout le monde a consommé {hours}",
     "message3": "C'est {plays} lectures au total",
     "message4": "De {items} éléments uniques"
+  },
+  "wrapped": {
+    "startExperience": "Démarrer Votre Wrapped",
+    "generating": "Génération de votre récapitulatif personnalisé...",
+    "errorGenerating": "Erreur lors de la génération de votre récapitulatif. Veuillez réessayer.",
+    "skip": "Passer",
+    "tapToContinue": "Appuyez n'importe où ou appuyez sur une touche pour continuer"
+  },
+  "comingSoon": {
+    "title": "Bientôt disponible",
+    "message": "Votre Wrapped {year} sera bientôt disponible !",
+    "subtitle": "Revenez le dernier vendredi de novembre pour voir votre récapitulatif de l'année.",
+    "days": "Jours",
+    "hours": "Heures",
+    "minutes": "Minutes",
+    "seconds": "Secondes"
   }
 }
 

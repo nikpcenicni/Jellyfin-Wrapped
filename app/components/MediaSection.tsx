@@ -1,5 +1,6 @@
 'use client'
 
+import { motion } from 'framer-motion'
 import PodiumDisplay from './PodiumDisplay'
 import MediaList from './MediaList'
 
@@ -29,11 +30,20 @@ export default function MediaSection({ title, icon, items, isShow = false, hover
   const remaining = items.slice(3)
 
   return (
-    <div>
-      <h2 className="text-2xl md:text-3xl font-bold text-white mb-12 md:mb-8 flex items-center gap-2 md:gap-3 px-2 md:px-0">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+    >
+      <motion.h2 
+        className="text-2xl md:text-3xl font-bold text-white mb-12 md:mb-8 flex items-center gap-2 md:gap-3 px-2 md:px-0"
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+      >
         <span className="text-3xl md:text-4xl">{icon}</span>
         {title}
-      </h2>
+      </motion.h2>
       
       {/* Podium for Top 3 */}
       {items.length >= 3 ? (
@@ -49,7 +59,7 @@ export default function MediaSection({ title, icon, items, isShow = false, hover
       {remaining.length > 0 && (
         <MediaList items={remaining} startRank={4} isShow={isShow} hoverColor={hoverColor} />
       )}
-    </div>
+    </motion.div>
   )
 }
 

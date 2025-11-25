@@ -5,6 +5,11 @@
 
 const TOP_ITEMS_LIMIT = 10;
 
+// Validation constants
+const MIN_PLAY_DURATION_SECONDS = 60; // Minimum 1 minute to count as a valid play
+const MIN_PLAY_PERCENTAGE = 0.05; // Minimum 5% of typical duration (for movies ~90min = 4.5min)
+const DUPLICATE_WINDOW_MINUTES = 10; // Consider plays within 10 minutes as potential duplicates
+
 /**
  * Build year filter dates for SQL queries
  * @param {number} year - The year to filter by
@@ -16,6 +21,33 @@ const buildYearFilter = (year) => ({
 });
 
 /**
+ * Build validation WHERE clause to filter invalid/duplicate plays
+ * This filters out:
+ * - Plays shorter than minimum duration (60 seconds)
+ * - Duplicate plays within a short time window (same item, same user, within 10 minutes)
+ *   Strategy: Keep only the first play in a sequence of rapid plays
+ * @param {string} tableAlias - Table alias to use (default: 'pa')
+ * @returns {string} SQL WHERE clause fragment
+ */
+const buildPlayValidationClause = (tableAlias = 'pa') => {
+  // Filter out plays that are too short (less than 1 minute)
+  // Filter out duplicate plays: if the same item was played by the same user within 10 minutes,
+  // keep only the first one (the one with the earliest DateCreated)
+  return `
+    AND ${tableAlias}.PlayDuration >= ${MIN_PLAY_DURATION_SECONDS}
+    AND ${tableAlias}.DateCreated = (
+      SELECT MIN(pa2.DateCreated)
+      FROM PlaybackActivity pa2
+      WHERE pa2.ItemId = ${tableAlias}.ItemId
+        AND pa2.UserId = ${tableAlias}.UserId
+        AND pa2.PlayDuration >= ${MIN_PLAY_DURATION_SECONDS}
+        AND (julianday(${tableAlias}.DateCreated) - julianday(pa2.DateCreated)) * 1440 < ${DUPLICATE_WINDOW_MINUTES}
+        AND (julianday(${tableAlias}.DateCreated) - julianday(pa2.DateCreated)) * 1440 >= 0
+    )
+  `;
+};
+
+/**
  * Build SQL query for top movies
  * @param {number} year - The year to filter by
  * @param {string|null} userId - Optional user ID to filter by (for personalized stats)
@@ -23,24 +55,26 @@ const buildYearFilter = (year) => ({
  */
 const buildTopMoviesQuery = (year, userId = null) => {
   const { startDate, endDate } = buildYearFilter(year);
-  const userFilter = userId ? `AND UserId = '${userId}'` : '';
+  const userFilter = userId ? `AND pa.UserId = '${userId}'` : '';
+  const validationClause = buildPlayValidationClause('pa');
   
   return `
     SELECT
-      ItemId,
-      ItemName,
-      ItemType,
+      pa.ItemId,
+      pa.ItemName,
+      pa.ItemType,
       COUNT(*) as PlayCount,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) AS INTEGER) as TotalPlayDuration,
-      (COUNT(*) + CAST(SUM(CAST(PlayDuration AS INTEGER)) AS REAL) / 3600.0) as CombinedScore
-    FROM PlaybackActivity
-    WHERE ItemType = 'Movie'
+      CAST(SUM(CAST(pa.PlayDuration AS INTEGER)) AS INTEGER) as TotalPlayDuration,
+      (COUNT(*) + CAST(SUM(CAST(pa.PlayDuration AS INTEGER)) AS REAL) / 3600.0) as CombinedScore
+    FROM PlaybackActivity pa
+    WHERE pa.ItemType = 'Movie'
       ${userFilter}
-      AND DateCreated >= '${startDate}'
-      AND DateCreated < '${endDate}'
-      AND PlayDuration > 0
-      AND PlayDuration < 86400
-    GROUP BY ItemId, ItemName, ItemType
+      AND pa.DateCreated >= '${startDate}'
+      AND pa.DateCreated < '${endDate}'
+      AND pa.PlayDuration > 0
+      AND pa.PlayDuration < 86400
+      ${validationClause}
+    GROUP BY pa.ItemId, pa.ItemName, pa.ItemType
     ORDER BY CombinedScore DESC
     LIMIT ${TOP_ITEMS_LIMIT}
   `;
@@ -54,25 +88,27 @@ const buildTopMoviesQuery = (year, userId = null) => {
  */
 const buildTopShowsQuery = (year, userId = null) => {
   const { startDate, endDate } = buildYearFilter(year);
-  const userFilter = userId ? `AND UserId = '${userId}'` : '';
+  const userFilter = userId ? `AND pa.UserId = '${userId}'` : '';
+  const validationClause = buildPlayValidationClause('pa');
   
   return `
     SELECT
-      TRIM(SUBSTR(ItemName, 1, INSTR(ItemName || ' - s', ' - s') - 1)) as SeriesName,
+      TRIM(SUBSTR(pa.ItemName, 1, INSTR(pa.ItemName || ' - s', ' - s') - 1)) as SeriesName,
       COUNT(*) as PlayCount,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) AS INTEGER) as TotalPlayDuration,
-      MIN(ItemId) as ItemId,
+      CAST(SUM(CAST(pa.PlayDuration AS INTEGER)) AS INTEGER) as TotalPlayDuration,
+      MIN(pa.ItemId) as ItemId,
       'Series' as ItemType,
-      (COUNT(*) + CAST(SUM(CAST(PlayDuration AS INTEGER)) AS REAL) / 3600.0) as CombinedScore
-    FROM PlaybackActivity
-    WHERE ItemType = 'Episode'
+      (COUNT(*) + CAST(SUM(CAST(pa.PlayDuration AS INTEGER)) AS REAL) / 3600.0) as CombinedScore
+    FROM PlaybackActivity pa
+    WHERE pa.ItemType = 'Episode'
       ${userFilter}
-      AND DateCreated >= '${startDate}'
-      AND DateCreated < '${endDate}'
-      AND PlayDuration > 0
-      AND PlayDuration < 86400
-      AND ItemName LIKE '% - s%'
-    GROUP BY TRIM(SUBSTR(ItemName, 1, INSTR(ItemName || ' - s', ' - s') - 1))
+      AND pa.DateCreated >= '${startDate}'
+      AND pa.DateCreated < '${endDate}'
+      AND pa.PlayDuration > 0
+      AND pa.PlayDuration < 86400
+      AND pa.ItemName LIKE '% - s%'
+      ${validationClause}
+    GROUP BY TRIM(SUBSTR(pa.ItemName, 1, INSTR(pa.ItemName || ' - s', ' - s') - 1))
     ORDER BY CombinedScore DESC
     LIMIT ${TOP_ITEMS_LIMIT}
   `;
@@ -86,19 +122,21 @@ const buildTopShowsQuery = (year, userId = null) => {
  */
 const buildMonthlyActivityQuery = (year, userId = null) => {
   const { startDate, endDate } = buildYearFilter(year);
-  const userFilter = userId ? `AND UserId = '${userId}'` : '';
+  const userFilter = userId ? `AND pa.UserId = '${userId}'` : '';
+  const validationClause = buildPlayValidationClause('pa');
   
   return `
     SELECT
-      strftime('%Y-%m', DateCreated) as Month,
+      strftime('%Y-%m', pa.DateCreated) as Month,
       COUNT(*) as PlayCount,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds
-    FROM PlaybackActivity
-    WHERE DateCreated >= '${startDate}'
-      AND DateCreated < '${endDate}'
+      CAST(SUM(CAST(pa.PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds
+    FROM PlaybackActivity pa
+    WHERE pa.DateCreated >= '${startDate}'
+      AND pa.DateCreated < '${endDate}'
       ${userFilter}
-      AND PlayDuration > 0
-      AND PlayDuration < 86400
+      AND pa.PlayDuration > 0
+      AND pa.PlayDuration < 86400
+      ${validationClause}
     GROUP BY Month
     ORDER BY Month
   `;
@@ -112,21 +150,23 @@ const buildMonthlyActivityQuery = (year, userId = null) => {
  */
 const buildTotalWatchTimeQuery = (year, userId = null) => {
   const { startDate, endDate } = buildYearFilter(year);
-  const userFilter = userId ? `AND UserId = '${userId}'` : '';
+  const userFilter = userId ? `AND pa.UserId = '${userId}'` : '';
+  const validationClause = buildPlayValidationClause('pa');
   
   return `
     SELECT
-      COUNT(DISTINCT ItemId) as UniqueItems,
+      COUNT(DISTINCT pa.ItemId) as UniqueItems,
       COUNT(*) as TotalPlays,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) / 60.0 AS INTEGER) as TotalMinutes,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) / 3600.0 AS INTEGER) as TotalHours
-    FROM PlaybackActivity
-    WHERE DateCreated >= '${startDate}'
-      AND DateCreated < '${endDate}'
+      CAST(SUM(CAST(pa.PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds,
+      CAST(ROUND(SUM(CAST(pa.PlayDuration AS INTEGER)) / 60.0) AS INTEGER) as TotalMinutes,
+      CAST(ROUND(SUM(CAST(pa.PlayDuration AS INTEGER)) / 3600.0) AS INTEGER) as TotalHours
+    FROM PlaybackActivity pa
+    WHERE pa.DateCreated >= '${startDate}'
+      AND pa.DateCreated < '${endDate}'
       ${userFilter}
-      AND PlayDuration > 0
-      AND PlayDuration < 86400
+      AND pa.PlayDuration > 0
+      AND pa.PlayDuration < 86400
+      ${validationClause}
   `;
 };
 
@@ -138,26 +178,28 @@ const buildTotalWatchTimeQuery = (year, userId = null) => {
  */
 const buildMediaTypeComparisonQuery = (year, userId = null) => {
   const { startDate, endDate } = buildYearFilter(year);
-  const userFilter = userId ? `AND UserId = '${userId}'` : '';
+  const userFilter = userId ? `AND pa.UserId = '${userId}'` : '';
+  const validationClause = buildPlayValidationClause('pa');
   
   return `
     SELECT
       CASE 
-        WHEN ItemType = 'Movie' THEN 'Movies'
-        WHEN ItemType = 'Episode' THEN 'Shows'
-        ELSE ItemType
+        WHEN pa.ItemType = 'Movie' THEN 'Movies'
+        WHEN pa.ItemType = 'Episode' THEN 'Shows'
+        ELSE pa.ItemType
       END as MediaType,
       COUNT(*) as PlayCount,
-      COUNT(DISTINCT ItemId) as UniqueItems,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) / 3600.0 AS INTEGER) as TotalHours
-    FROM PlaybackActivity
-    WHERE DateCreated >= '${startDate}'
-      AND DateCreated < '${endDate}'
+      COUNT(DISTINCT pa.ItemId) as UniqueItems,
+      CAST(SUM(CAST(pa.PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds,
+      CAST(ROUND(SUM(CAST(pa.PlayDuration AS INTEGER)) / 3600.0) AS INTEGER) as TotalHours
+    FROM PlaybackActivity pa
+    WHERE pa.DateCreated >= '${startDate}'
+      AND pa.DateCreated < '${endDate}'
       ${userFilter}
-      AND PlayDuration > 0
-      AND PlayDuration < 86400
-      AND (ItemType = 'Movie' OR ItemType = 'Episode')
+      AND pa.PlayDuration > 0
+      AND pa.PlayDuration < 86400
+      AND (pa.ItemType = 'Movie' OR pa.ItemType = 'Episode')
+      ${validationClause}
     GROUP BY MediaType
     ORDER BY PlayCount DESC
   `;
@@ -173,21 +215,23 @@ const buildMediaTypeComparisonQuery = (year, userId = null) => {
  */
 const buildTopMovieIdsForYearAnalysisQuery = (year, userId = null, limit = 50) => {
   const { startDate, endDate } = buildYearFilter(year);
-  const userFilter = userId ? `AND UserId = '${userId}'` : '';
+  const userFilter = userId ? `AND pa.UserId = '${userId}'` : '';
+  const validationClause = buildPlayValidationClause('pa');
   
   return `
     SELECT DISTINCT
-      ItemId,
-      ItemName,
+      pa.ItemId,
+      pa.ItemName,
       COUNT(*) as PlayCount
-    FROM PlaybackActivity
-    WHERE ItemType = 'Movie'
+    FROM PlaybackActivity pa
+    WHERE pa.ItemType = 'Movie'
       ${userFilter}
-      AND DateCreated >= '${startDate}'
-      AND DateCreated < '${endDate}'
-      AND PlayDuration > 0
-      AND PlayDuration < 86400
-    GROUP BY ItemId, ItemName
+      AND pa.DateCreated >= '${startDate}'
+      AND pa.DateCreated < '${endDate}'
+      AND pa.PlayDuration > 0
+      AND pa.PlayDuration < 86400
+      ${validationClause}
+    GROUP BY pa.ItemId, pa.ItemName
     ORDER BY PlayCount DESC
     LIMIT ${limit}
   `;
@@ -203,21 +247,23 @@ const buildTopMovieIdsForYearAnalysisQuery = (year, userId = null, limit = 50) =
  */
 const buildTopMovieIdsForGenreAnalysisQuery = (year, userId = null, limit = 100) => {
   const { startDate, endDate } = buildYearFilter(year);
-  const userFilter = userId ? `AND UserId = '${userId}'` : '';
+  const userFilter = userId ? `AND pa.UserId = '${userId}'` : '';
+  const validationClause = buildPlayValidationClause('pa');
   
   return `
     SELECT DISTINCT
-      ItemId,
-      ItemName,
+      pa.ItemId,
+      pa.ItemName,
       COUNT(*) as PlayCount
-    FROM PlaybackActivity
-    WHERE ItemType = 'Movie'
+    FROM PlaybackActivity pa
+    WHERE pa.ItemType = 'Movie'
       ${userFilter}
-      AND DateCreated >= '${startDate}'
-      AND DateCreated < '${endDate}'
-      AND PlayDuration > 0
-      AND PlayDuration < 86400
-    GROUP BY ItemId, ItemName
+      AND pa.DateCreated >= '${startDate}'
+      AND pa.DateCreated < '${endDate}'
+      AND pa.PlayDuration > 0
+      AND pa.PlayDuration < 86400
+      ${validationClause}
+    GROUP BY pa.ItemId, pa.ItemName
     ORDER BY PlayCount DESC
     LIMIT ${limit}
   `;
@@ -230,18 +276,20 @@ const buildTopMovieIdsForGenreAnalysisQuery = (year, userId = null, limit = 100)
  */
 const buildUserRankingAllMediaQuery = (year) => {
   const { startDate, endDate } = buildYearFilter(year);
+  const validationClause = buildPlayValidationClause('pa');
   
   return `
     SELECT
-      UserId,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) / 3600.0 AS INTEGER) as TotalHours
-    FROM PlaybackActivity
-    WHERE DateCreated >= '${startDate}'
-      AND DateCreated < '${endDate}'
-      AND PlayDuration > 0
-      AND PlayDuration < 86400
-    GROUP BY UserId
+      pa.UserId,
+      CAST(SUM(CAST(pa.PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds,
+      CAST(ROUND(SUM(CAST(pa.PlayDuration AS INTEGER)) / 3600.0) AS INTEGER) as TotalHours
+    FROM PlaybackActivity pa
+    WHERE pa.DateCreated >= '${startDate}'
+      AND pa.DateCreated < '${endDate}'
+      AND pa.PlayDuration > 0
+      AND pa.PlayDuration < 86400
+      ${validationClause}
+    GROUP BY pa.UserId
     ORDER BY TotalSeconds DESC
   `;
 };
@@ -253,19 +301,21 @@ const buildUserRankingAllMediaQuery = (year) => {
  */
 const buildUserRankingMoviesQuery = (year) => {
   const { startDate, endDate } = buildYearFilter(year);
+  const validationClause = buildPlayValidationClause('pa');
   
   return `
     SELECT
-      UserId,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) / 3600.0 AS INTEGER) as TotalHours
-    FROM PlaybackActivity
-    WHERE ItemType = 'Movie'
-      AND DateCreated >= '${startDate}'
-      AND DateCreated < '${endDate}'
-      AND PlayDuration > 0
-      AND PlayDuration < 86400
-    GROUP BY UserId
+      pa.UserId,
+      CAST(SUM(CAST(pa.PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds,
+      CAST(ROUND(SUM(CAST(pa.PlayDuration AS INTEGER)) / 3600.0) AS INTEGER) as TotalHours
+    FROM PlaybackActivity pa
+    WHERE pa.ItemType = 'Movie'
+      AND pa.DateCreated >= '${startDate}'
+      AND pa.DateCreated < '${endDate}'
+      AND pa.PlayDuration > 0
+      AND pa.PlayDuration < 86400
+      ${validationClause}
+    GROUP BY pa.UserId
     ORDER BY TotalSeconds DESC
   `;
 };
@@ -277,19 +327,21 @@ const buildUserRankingMoviesQuery = (year) => {
  */
 const buildUserRankingShowsQuery = (year) => {
   const { startDate, endDate } = buildYearFilter(year);
+  const validationClause = buildPlayValidationClause('pa');
   
   return `
     SELECT
-      UserId,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds,
-      CAST(SUM(CAST(PlayDuration AS INTEGER)) / 3600.0 AS INTEGER) as TotalHours
-    FROM PlaybackActivity
-    WHERE ItemType = 'Episode'
-      AND DateCreated >= '${startDate}'
-      AND DateCreated < '${endDate}'
-      AND PlayDuration > 0
-      AND PlayDuration < 86400
-    GROUP BY UserId
+      pa.UserId,
+      CAST(SUM(CAST(pa.PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds,
+      CAST(ROUND(SUM(CAST(pa.PlayDuration AS INTEGER)) / 3600.0) AS INTEGER) as TotalHours
+    FROM PlaybackActivity pa
+    WHERE pa.ItemType = 'Episode'
+      AND pa.DateCreated >= '${startDate}'
+      AND pa.DateCreated < '${endDate}'
+      AND pa.PlayDuration > 0
+      AND pa.PlayDuration < 86400
+      ${validationClause}
+    GROUP BY pa.UserId
     ORDER BY TotalSeconds DESC
   `;
 };

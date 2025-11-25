@@ -68,6 +68,22 @@
     "message2": "Alle haben {hours} konsumiert",
     "message3": "Das sind {plays} Wiedergaben insgesamt",
     "message4": "Von {items} einzigartigen Elementen"
+  },
+  "wrapped": {
+    "startExperience": "Dein Wrapped starten",
+    "generating": "Generiere deine personalisierte Zusammenfassung...",
+    "errorGenerating": "Fehler beim Generieren deiner Zusammenfassung. Bitte versuche es erneut.",
+    "skip": "Überspringen",
+    "tapToContinue": "Tippe irgendwo oder drücke eine Taste, um fortzufahren"
+  },
+  "comingSoon": {
+    "title": "Demnächst",
+    "message": "Dein {year} Wrapped wird bald verfügbar sein!",
+    "subtitle": "Komm am letzten Freitag im November zurück, um deine Jahreszusammenfassung zu sehen.",
+    "days": "Tage",
+    "hours": "Stunden",
+    "minutes": "Minuten",
+    "seconds": "Sekunden"
   }
 }
 
