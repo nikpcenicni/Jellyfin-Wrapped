@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 const config = require('./config');
+const { initDatabase } = require('./services/cache/database');
+const { scheduleMonthlySync } = require('./services/cache/sync');
 
 const app = express();
 const PORT = config.port;
@@ -11,6 +13,15 @@ app.use(cors());
 app.use(express.json());
 // Note: In production Docker setup, nginx handles serving the Next.js frontend
 // The Express server only handles API routes
+
+// Initialize cache database
+initDatabase().then(() => {
+  // Start monthly sync scheduler after DB is initialized
+  scheduleMonthlySync();
+}).catch(err => {
+  console.error('[Server] Failed to initialize cache database:', err);
+  // Continue without cache if DB fails
+});
 
 // Import and attach routes
 const attachRoutes = require('./routes');

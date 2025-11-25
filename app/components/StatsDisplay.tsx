@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import TotalWatchTimeCard from './TotalWatchTimeCard'
 import MediaSection from './MediaSection'
+import UserRanking from './UserRanking'
 import { formatDuration } from './utils'
 
 interface Stats {
@@ -31,9 +32,12 @@ interface Stats {
 
 interface StatsDisplayProps {
   stats: Stats
+  showPersonalized?: boolean
+  userId?: string | null
+  year?: number
 }
 
-export default function StatsDisplay({ stats }: StatsDisplayProps) {
+export default function StatsDisplay({ stats, showPersonalized = false, userId = null, year }: StatsDisplayProps) {
   const [isVisible, setIsVisible] = useState(false)
 
   useEffect(() => {
@@ -47,6 +51,11 @@ export default function StatsDisplay({ stats }: StatsDisplayProps) {
 
   return (
     <div className={`space-y-6 md:space-y-10 transition-opacity duration-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+      {/* User Ranking - Only show when personalized */}
+      {showPersonalized && userId && year && (
+        <UserRanking year={year} userId={userId} />
+      )}
+
       {/* Total Watch Time Card */}
       {totalWatchTime && (
         <TotalWatchTimeCard totalWatchTime={totalWatchTime} />

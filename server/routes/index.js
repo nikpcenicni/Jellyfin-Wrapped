@@ -4,6 +4,7 @@ const { enrichItemsWithPosters } = require('../services/images/posters');
 const { generateIntroMessages } = require('../services/ai/openai');
 const { getItemDetails } = require('../services/jellyfin/items');
 const { transformToObjects, deduplicateShows, validateAndSanitizeUserId } = require('../utils/transform');
+const { getCache, setCache } = require('../services/cache/database');
 const {
   buildTopMoviesQuery,
   buildTopShowsQuery,
@@ -12,6 +13,9 @@ const {
   buildMediaTypeComparisonQuery,
   buildTopMovieIdsForYearAnalysisQuery,
   buildTopMovieIdsForGenreAnalysisQuery,
+  buildUserRankingAllMediaQuery,
+  buildUserRankingMoviesQuery,
+  buildUserRankingShowsQuery,
   TOP_ITEMS_LIMIT
 } = require('../utils/queryBuilders');
 
@@ -176,7 +180,8 @@ const handleIntro = async (req, res) => {
     const validatedUseCase = VALID_USE_CASES.includes(useCase) ? useCase : DEFAULT_USE_CASE;
     const messages = await generateIntroMessages(stats, validatedUseCase);
 
-    res.json({ messages: messages || null });
+    // Always return an array (never null) - static messages are the default
+    res.json({ messages: messages || [] });
   } catch (error) {
     handleError(res, error, 'Failed to generate intro messages');
   }
@@ -219,6 +224,135 @@ const handleImageProxy = async (req, res) => {
   } catch (error) {
     handleError(res, error, 'Internal server error while fetching image');
   }
+};
+
+// Individual stat fetching functions with caching
+const fetchStatWithCache = async (statType, year, userId, accessToken, fetchFn) => {
+  // Check cache first
+  const cached = await getCache(statType, year, userId);
+  if (cached) {
+    console.log(`[Cache] Hit for ${statType} (year: ${year}, user: ${userId || 'global'})`);
+    return cached;
+  }
+  
+  console.log(`[Cache] Miss for ${statType} (year: ${year}, user: ${userId || 'global'})`);
+  const data = await fetchFn();
+  
+  // Cache the result (30 day TTL)
+  await setCache(statType, year, data, userId, 30).catch(err => {
+    console.error(`[Cache] Failed to cache ${statType}:`, err);
+  });
+  
+  return data;
+};
+
+const fetchTotalWatchTime = async (year, userId = null, accessToken = null) => {
+  const query = buildTotalWatchTimeQuery(year, userId);
+  const executeFn = accessToken 
+    ? () => executeQueryForUser(query, accessToken)
+    : () => executeQuery(query, true);
+  
+  const response = await executeFn();
+  return transformToObjects(response);
+};
+
+const fetchMonthlyActivity = async (year, userId = null, accessToken = null) => {
+  const query = buildMonthlyActivityQuery(year, userId);
+  const executeFn = accessToken 
+    ? () => executeQueryForUser(query, accessToken)
+    : () => executeQuery(query, true);
+  
+  const response = await executeFn();
+  return transformToObjects(response);
+};
+
+const fetchTopMovies = async (year, userId = null, accessToken = null) => {
+  const query = buildTopMoviesQuery(year, userId);
+  const executeFn = accessToken 
+    ? () => executeQueryForUser(query, accessToken)
+    : () => executeQuery(query, true);
+  
+  const response = await executeFn();
+  let movies = transformToObjects(response);
+  return await enrichItemsWithPosters(movies);
+};
+
+const fetchTopShows = async (year, userId = null, accessToken = null) => {
+  const query = buildTopShowsQuery(year, userId);
+  const executeFn = accessToken 
+    ? () => executeQueryForUser(query, accessToken)
+    : () => executeQuery(query, true);
+  
+  const response = await executeFn();
+  let shows = transformToObjects(response);
+  shows = deduplicateShows(shows).slice(0, TOP_ITEMS_LIMIT);
+  return await enrichItemsWithPosters(shows);
+};
+
+const fetchMediaTypeComparison = async (year, userId = null, accessToken = null) => {
+  const query = buildMediaTypeComparisonQuery(year, userId);
+  const executeFn = accessToken 
+    ? () => executeQueryForUser(query, accessToken)
+    : () => executeQuery(query, true);
+  
+  const response = await executeFn();
+  const mediaTypeComparison = transformToObjects(response);
+  
+  const moviesData = mediaTypeComparison.find(m => m.MediaType === 'Movies');
+  const showsData = mediaTypeComparison.find(m => m.MediaType === 'Shows');
+  
+  let preferredMediaType = null;
+  if (moviesData && showsData) {
+    const moviesHours = moviesData.TotalHours || 0;
+    const showsHours = showsData.TotalHours || 0;
+    preferredMediaType = {
+      type: moviesHours > showsHours ? 'Movies' : 'Shows',
+      movies: {
+        hours: moviesHours,
+        plays: moviesData.PlayCount || 0,
+        uniqueItems: moviesData.UniqueItems || 0
+      },
+      shows: {
+        hours: showsHours,
+        plays: showsData.PlayCount || 0,
+        uniqueItems: showsData.UniqueItems || 0
+      }
+    };
+  }
+  
+  return { mediaTypeComparison, preferredMediaType };
+};
+
+const fetchTopGenres = async (year, userId = null, accessToken = null) => {
+  const query = buildTopMovieIdsForGenreAnalysisQuery(year, userId, 100);
+  const executeFn = accessToken 
+    ? () => executeQueryForUser(query, accessToken)
+    : () => executeQuery(query, true);
+  
+  const response = await executeFn();
+  const topMovieIdsForGenre = transformToObjects(response);
+  const topGenres = await analyzeGenres(topMovieIdsForGenre).catch(err => {
+    console.error('[fetchTopGenres] Error analyzing genres:', err);
+    return [];
+  });
+  
+  return topGenres.length > 0 ? topGenres : null;
+};
+
+const fetchTopMovieYears = async (year, userId = null, accessToken = null) => {
+  const query = buildTopMovieIdsForYearAnalysisQuery(year, userId, 50);
+  const executeFn = accessToken 
+    ? () => executeQueryForUser(query, accessToken)
+    : () => executeQuery(query, true);
+  
+  const response = await executeFn();
+  const topMovieIdsForYear = transformToObjects(response);
+  const topMovieYears = await analyzeMovieYears(topMovieIdsForYear).catch(err => {
+    console.error('[fetchTopMovieYears] Error analyzing movie years:', err);
+    return [];
+  });
+  
+  return topMovieYears.length > 0 ? topMovieYears : null;
 };
 
 const fetchStatsData = async (year, userId = null, accessToken = null) => {
@@ -355,6 +489,234 @@ const handlePersonalStats = async (req, res) => {
   }
 };
 
+const handleUserRanking = async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Authentication required. Please provide access token.' });
+    }
+
+    const accessToken = authHeader.substring(7);
+    const userId = req.query.userId?.trim();
+    const validation = validateAndSanitizeUserId(userId);
+
+    if (!validation.valid) {
+      return res.status(400).json({
+        error: validation.error,
+        ...(validation.received && { received: validation.received, length: validation.length })
+      });
+    }
+
+    const year = getYearFromQuery(req.query);
+    
+    // Build and execute ranking queries
+    const queries = {
+      allMedia: buildUserRankingAllMediaQuery(year),
+      movies: buildUserRankingMoviesQuery(year),
+      shows: buildUserRankingShowsQuery(year)
+    };
+
+    // Execute queries using user's access token (with ReplaceUserId: false to see actual user IDs)
+    const [allMediaResponse, moviesResponse, showsResponse] = await Promise.all([
+      executeQueryForUser(queries.allMedia, accessToken),
+      executeQueryForUser(queries.movies, accessToken),
+      executeQueryForUser(queries.shows, accessToken)
+    ]);
+
+    const allMediaResults = transformToObjects(allMediaResponse);
+    const moviesResults = transformToObjects(moviesResponse);
+    const showsResults = transformToObjects(showsResponse);
+
+    // Find user's rank in each category
+    const findRank = (results, targetUserId) => {
+      const index = results.findIndex(r => r.UserId === targetUserId);
+      return index >= 0 ? index + 1 : null; // Rank is 1-based
+    };
+
+    const allMediaRank = findRank(allMediaResults, validation.sanitized);
+    const moviesRank = findRank(moviesResults, validation.sanitized);
+    const showsRank = findRank(showsResults, validation.sanitized);
+
+    // Get user's stats for each category
+    const getUserStats = (results, targetUserId) => {
+      const userData = results.find(r => r.UserId === targetUserId);
+      return userData ? {
+        totalSeconds: userData.TotalSeconds || 0,
+        totalHours: userData.TotalHours || 0
+      } : null;
+    };
+
+    res.json({
+      year,
+      allMedia: {
+        rank: allMediaRank,
+        totalUsers: allMediaResults.length,
+        stats: getUserStats(allMediaResults, validation.sanitized)
+      },
+      movies: {
+        rank: moviesRank,
+        totalUsers: moviesResults.length,
+        stats: getUserStats(moviesResults, validation.sanitized)
+      },
+      shows: {
+        rank: showsRank,
+        totalUsers: showsResults.length,
+        stats: getUserStats(showsResults, validation.sanitized)
+      }
+    });
+  } catch (error) {
+    handleError(res, error, 'Failed to fetch user rankings');
+  }
+};
+
+// Individual stat endpoints for progressive loading
+const handleStatTotalWatchTime = async (req, res) => {
+  try {
+    const year = getYearFromQuery(req.query);
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+    const userId = req.query.userId?.trim() || null;
+    
+    const data = await fetchStatWithCache(
+      'totalWatchTime',
+      year,
+      userId,
+      accessToken,
+      () => fetchTotalWatchTime(year, userId, accessToken)
+    );
+    
+    res.json({ totalWatchTime: data });
+  } catch (error) {
+    handleError(res, error, 'Failed to fetch total watch time');
+  }
+};
+
+const handleStatMonthlyActivity = async (req, res) => {
+  try {
+    const year = getYearFromQuery(req.query);
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+    const userId = req.query.userId?.trim() || null;
+    
+    const data = await fetchStatWithCache(
+      'monthlyActivity',
+      year,
+      userId,
+      accessToken,
+      () => fetchMonthlyActivity(year, userId, accessToken)
+    );
+    
+    res.json({ monthlyActivity: data });
+  } catch (error) {
+    handleError(res, error, 'Failed to fetch monthly activity');
+  }
+};
+
+const handleStatTopMovies = async (req, res) => {
+  try {
+    const year = getYearFromQuery(req.query);
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+    const userId = req.query.userId?.trim() || null;
+    
+    const data = await fetchStatWithCache(
+      'topMovies',
+      year,
+      userId,
+      accessToken,
+      () => fetchTopMovies(year, userId, accessToken)
+    );
+    
+    res.json({ topMovies: data });
+  } catch (error) {
+    handleError(res, error, 'Failed to fetch top movies');
+  }
+};
+
+const handleStatTopShows = async (req, res) => {
+  try {
+    const year = getYearFromQuery(req.query);
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+    const userId = req.query.userId?.trim() || null;
+    
+    const data = await fetchStatWithCache(
+      'topShows',
+      year,
+      userId,
+      accessToken,
+      () => fetchTopShows(year, userId, accessToken)
+    );
+    
+    res.json({ topShows: data });
+  } catch (error) {
+    handleError(res, error, 'Failed to fetch top shows');
+  }
+};
+
+const handleStatMediaTypeComparison = async (req, res) => {
+  try {
+    const year = getYearFromQuery(req.query);
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+    const userId = req.query.userId?.trim() || null;
+    
+    const data = await fetchStatWithCache(
+      'mediaTypeComparison',
+      year,
+      userId,
+      accessToken,
+      () => fetchMediaTypeComparison(year, userId, accessToken)
+    );
+    
+    res.json(data);
+  } catch (error) {
+    handleError(res, error, 'Failed to fetch media type comparison');
+  }
+};
+
+const handleStatTopGenres = async (req, res) => {
+  try {
+    const year = getYearFromQuery(req.query);
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+    const userId = req.query.userId?.trim() || null;
+    
+    const data = await fetchStatWithCache(
+      'topGenres',
+      year,
+      userId,
+      accessToken,
+      () => fetchTopGenres(year, userId, accessToken)
+    );
+    
+    res.json({ topGenres: data });
+  } catch (error) {
+    handleError(res, error, 'Failed to fetch top genres');
+  }
+};
+
+const handleStatTopMovieYears = async (req, res) => {
+  try {
+    const year = getYearFromQuery(req.query);
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+    const userId = req.query.userId?.trim() || null;
+    
+    const data = await fetchStatWithCache(
+      'topMovieYears',
+      year,
+      userId,
+      accessToken,
+      () => fetchTopMovieYears(year, userId, accessToken)
+    );
+    
+    res.json({ topMovieYears: data });
+  } catch (error) {
+    handleError(res, error, 'Failed to fetch top movie years');
+  }
+};
+
 const handleLogin = async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -482,6 +844,16 @@ function attachRoutes(app) {
   // Statistics Routes
   app.get('/api/stats', handleStats);
   app.get('/api/stats/personal', handlePersonalStats);
+  app.get('/api/stats/ranking', handleUserRanking);
+  
+  // Individual stat endpoints for progressive loading
+  app.get('/api/stats/total-watch-time', handleStatTotalWatchTime);
+  app.get('/api/stats/monthly-activity', handleStatMonthlyActivity);
+  app.get('/api/stats/top-movies', handleStatTopMovies);
+  app.get('/api/stats/top-shows', handleStatTopShows);
+  app.get('/api/stats/media-type-comparison', handleStatMediaTypeComparison);
+  app.get('/api/stats/top-genres', handleStatTopGenres);
+  app.get('/api/stats/top-movie-years', handleStatTopMovieYears);
 
   // Authentication Routes
   app.post('/api/login', handleLogin);

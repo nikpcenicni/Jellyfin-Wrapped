@@ -223,6 +223,77 @@ const buildTopMovieIdsForGenreAnalysisQuery = (year, userId = null, limit = 100)
   `;
 };
 
+/**
+ * Build SQL query for user rankings by total watch time (all media)
+ * @param {number} year - The year to filter by
+ * @returns {string} SQL query string
+ */
+const buildUserRankingAllMediaQuery = (year) => {
+  const { startDate, endDate } = buildYearFilter(year);
+  
+  return `
+    SELECT
+      UserId,
+      CAST(SUM(CAST(PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds,
+      CAST(SUM(CAST(PlayDuration AS INTEGER)) / 3600.0 AS INTEGER) as TotalHours
+    FROM PlaybackActivity
+    WHERE DateCreated >= '${startDate}'
+      AND DateCreated < '${endDate}'
+      AND PlayDuration > 0
+      AND PlayDuration < 86400
+    GROUP BY UserId
+    ORDER BY TotalSeconds DESC
+  `;
+};
+
+/**
+ * Build SQL query for user rankings by movies watch time
+ * @param {number} year - The year to filter by
+ * @returns {string} SQL query string
+ */
+const buildUserRankingMoviesQuery = (year) => {
+  const { startDate, endDate } = buildYearFilter(year);
+  
+  return `
+    SELECT
+      UserId,
+      CAST(SUM(CAST(PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds,
+      CAST(SUM(CAST(PlayDuration AS INTEGER)) / 3600.0 AS INTEGER) as TotalHours
+    FROM PlaybackActivity
+    WHERE ItemType = 'Movie'
+      AND DateCreated >= '${startDate}'
+      AND DateCreated < '${endDate}'
+      AND PlayDuration > 0
+      AND PlayDuration < 86400
+    GROUP BY UserId
+    ORDER BY TotalSeconds DESC
+  `;
+};
+
+/**
+ * Build SQL query for user rankings by TV shows watch time
+ * @param {number} year - The year to filter by
+ * @returns {string} SQL query string
+ */
+const buildUserRankingShowsQuery = (year) => {
+  const { startDate, endDate } = buildYearFilter(year);
+  
+  return `
+    SELECT
+      UserId,
+      CAST(SUM(CAST(PlayDuration AS INTEGER)) AS INTEGER) as TotalSeconds,
+      CAST(SUM(CAST(PlayDuration AS INTEGER)) / 3600.0 AS INTEGER) as TotalHours
+    FROM PlaybackActivity
+    WHERE ItemType = 'Episode'
+      AND DateCreated >= '${startDate}'
+      AND DateCreated < '${endDate}'
+      AND PlayDuration > 0
+      AND PlayDuration < 86400
+    GROUP BY UserId
+    ORDER BY TotalSeconds DESC
+  `;
+};
+
 module.exports = {
   buildYearFilter,
   buildTopMoviesQuery,
@@ -232,6 +303,9 @@ module.exports = {
   buildMediaTypeComparisonQuery,
   buildTopMovieIdsForYearAnalysisQuery,
   buildTopMovieIdsForGenreAnalysisQuery,
+  buildUserRankingAllMediaQuery,
+  buildUserRankingMoviesQuery,
+  buildUserRankingShowsQuery,
   TOP_ITEMS_LIMIT
 };
 

@@ -10,7 +10,7 @@ A beautiful single-page web application that displays server-wide statistics fro
 - ⏱️ Total watch time analytics
 - 🔐 Login button for future personalized stats
 - 🐳 Docker containerized deployment
-- 🎨 Modern UI with Tailwind CSS
+
 
 ## Prerequisites
 
@@ -115,6 +115,39 @@ npm run client
 - OpenAI integration for insights and recommendations
 - Additional visualizations and charts
 - Export statistics functionality
+
+## CI/CD
+
+This project includes a GitHub Actions workflow that automatically builds and publishes Docker images to both GitHub Container Registry (ghcr.io) and Docker Hub when you push to the `main` branch or create version tags.
+
+### Setting up GitHub Actions
+
+1. **Configure GitHub Secrets:**
+   - Go to your repository Settings → Secrets and variables → Actions
+   - Add the following secrets:
+     - `DOCKERHUB_USERNAME` - Your Docker Hub username
+     - `DOCKERHUB_TOKEN` - Your Docker Hub access token (create at https://hub.docker.com/settings/security)
+   
+   Note: `GITHUB_TOKEN` is automatically provided by GitHub Actions and doesn't need to be configured.
+
+2. **Image Locations:**
+   - GitHub Container Registry: `ghcr.io/<your-username>/jellyfin-wrapped`
+   - Docker Hub: `docker.io/<your-username>/jellyfin-wrapped`
+
+3. **Tagging:**
+   - Pushes to `main` branch create a `latest` tag
+   - Version tags (e.g., `v1.0.0`) create semantic version tags
+   - Pull requests build the image but don't push to registries
+
+### Pulling Images
+
+```bash
+# From GitHub Container Registry
+docker pull ghcr.io/<your-username>/jellyfin-wrapped:latest
+
+# From Docker Hub
+docker pull <your-username>/jellyfin-wrapped:latest
+```
 
 ## License
 

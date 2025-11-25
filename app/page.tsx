@@ -41,6 +41,8 @@ export default function Home() {
   // const [hasShownReveal, setHasShownReveal] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [userName, setUserName] = useState<string | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
+  const [showPersonalized, setShowPersonalized] = useState(false) // Will be set to true when authenticated
 
   // Check authentication status on mount
   useEffect(() => {
@@ -53,14 +55,32 @@ export default function Home() {
             const user = JSON.parse(userStr)
             setIsAuthenticated(true)
             setUserName(user.name)
+            setUserId(user.id)
+            setShowPersonalized(true) // Default to personalized when authenticated
           } catch {
             // Invalid user data
             setIsAuthenticated(false)
+            setUserId(null)
+            setShowPersonalized(false)
           }
+        } else {
+          setIsAuthenticated(false)
+          setUserId(null)
+          setShowPersonalized(false)
         }
       }
     }
     checkAuth()
+
+    // Listen for auth changes
+    const handleAuthChange = () => {
+      checkAuth()
+    }
+    window.addEventListener('jellyfin-auth-changed', handleAuthChange)
+
+    return () => {
+      window.removeEventListener('jellyfin-auth-changed', handleAuthChange)
+    }
   }, [])
 
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -83,14 +103,11 @@ export default function Home() {
         abortControllerRef.current.abort()
       }
     }
-  }, [year, isAuthenticated])
+  }, [year, isAuthenticated, showPersonalized])
 
   const fetchStats = async (signal: AbortSignal) => {
     try {
       setLoading(true)
-      // Temporarily disabled reveal sequence
-      // setRevealComplete(false)
-      // setHasShownReveal(false)
       setError(null)
 
       // Check if user is authenticated
@@ -98,45 +115,85 @@ export default function Home() {
       const userStr = typeof window !== 'undefined' ? localStorage.getItem('jellyfin_user') : null
       const isUserAuthenticated = !!(accessToken && userStr)
 
-      let response
-      if (accessToken && userStr) {
+      // Initialize stats object
+      const initialStats: Stats = {
+        year,
+        topMovies: [],
+        topShows: [],
+        monthlyActivity: [],
+        totalWatchTime: [],
+        mediaTypeComparison: [],
+        preferredMediaType: undefined,
+        topGenres: null,
+        topMovieYears: null
+      }
+      setStats(initialStats)
+
+      const user = userStr ? JSON.parse(userStr) : null
+      const userId = user?.id || null
+      const authHeaders = accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}
+      const userIdParam = userId ? `&userId=${userId}` : ''
+
+      // Define stat endpoints in order of appearance
+      const statEndpoints = [
+        { key: 'totalWatchTime', url: `/api/stats/total-watch-time?year=${year}${userIdParam}` },
+        { key: 'topMovies', url: `/api/stats/top-movies?year=${year}${userIdParam}` },
+        { key: 'topShows', url: `/api/stats/top-shows?year=${year}${userIdParam}` },
+        { key: 'mediaTypeComparison', url: `/api/stats/media-type-comparison?year=${year}${userIdParam}` },
+        { key: 'monthlyActivity', url: `/api/stats/monthly-activity?year=${year}${userIdParam}` },
+        { key: 'topGenres', url: `/api/stats/top-genres?year=${year}${userIdParam}` },
+        { key: 'topMovieYears', url: `/api/stats/top-movie-years?year=${year}${userIdParam}` }
+      ]
+
+      // Fetch stats sequentially and update state as each completes
+      for (const endpoint of statEndpoints) {
+        if (signal.aborted) return
+
         try {
-          const user = JSON.parse(userStr)
-          // Fetch personalized stats
-          response = await axios.get(`/api/stats/personal?year=${year}&userId=${user.id}`, {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`
-            },
+          const response = await axios.get(endpoint.url, {
+            headers: authHeaders,
             signal
           })
-        } catch (authErr: any) {
+
+          if (signal.aborted) return
+
+          // Update stats progressively
+          setStats(prev => {
+            if (!prev) return prev
+            const updated = { ...prev }
+            
+            if (endpoint.key === 'totalWatchTime') {
+              updated.totalWatchTime = response.data.totalWatchTime || []
+            } else if (endpoint.key === 'topMovies') {
+              updated.topMovies = response.data.topMovies || []
+            } else if (endpoint.key === 'topShows') {
+              updated.topShows = response.data.topShows || []
+            } else if (endpoint.key === 'mediaTypeComparison') {
+              updated.mediaTypeComparison = response.data.mediaTypeComparison || []
+              updated.preferredMediaType = response.data.preferredMediaType || undefined
+            } else if (endpoint.key === 'monthlyActivity') {
+              updated.monthlyActivity = response.data.monthlyActivity || []
+            } else if (endpoint.key === 'topGenres') {
+              updated.topGenres = response.data.topGenres
+            } else if (endpoint.key === 'topMovieYears') {
+              updated.topMovieYears = response.data.topMovieYears
+            }
+            
+            return updated
+          })
+        } catch (endpointErr: any) {
           // Ignore request cancellation errors
-          if (axios.isCancel(authErr) || authErr.code === 'ECONNABORTED' || authErr.code === 'ERR_CANCELED' || authErr.name === 'AbortError' || authErr.name === 'CanceledError') {
-            return // Request was cancelled, don't proceed
+          if (axios.isCancel(endpointErr) || endpointErr.code === 'ECONNABORTED' || endpointErr.code === 'ERR_CANCELED' || endpointErr.name === 'AbortError' || endpointErr.name === 'CanceledError') {
+            return
           }
-          // If personalized stats fail for other reasons, fall back to server-wide stats
-          console.warn('Failed to fetch personalized stats, falling back to server-wide:', authErr)
-          response = await axios.get(`/api/stats?year=${year}`, { signal })
+          console.warn(`Failed to fetch ${endpoint.key}:`, endpointErr)
+          // Continue with next endpoint
         }
-      } else {
-        // Fetch server-wide stats
-        response = await axios.get(`/api/stats?year=${year}`, { signal })
       }
 
-      // Check if request was aborted
-      if (signal.aborted) {
-        return
-      }
+      if (signal.aborted) return
 
-      setStats(response.data)
       setLoading(false)
-      
-      // Temporarily disabled reveal sequence - stats show immediately for all users
-      // if (response.data && isUserAuthenticated) {
-      //   setHasShownReveal(true)
-      // } else if (response.data) {
-      //   setRevealComplete(true)
-      // }
     } catch (err: any) {
       // Ignore request cancellation errors
       if (axios.isCancel(err) || err.code === 'ECONNABORTED' || err.code === 'ERR_CANCELED' || err.name === 'AbortError' || err.name === 'CanceledError') {
@@ -146,8 +203,6 @@ export default function Home() {
       setError(err.response?.data?.message || 'Failed to load statistics')
       console.error('Error fetching stats:', err)
       setLoading(false)
-      // Temporarily disabled reveal sequence
-      // setRevealComplete(true)
     }
   }
 
@@ -177,12 +232,32 @@ export default function Home() {
               Jellyfin Wrapped
             </h1>
             <p className="text-gray-400 text-base md:text-xl font-light">
-              {isAuthenticated && userName 
+              {isAuthenticated && userName && showPersonalized
                 ? `${userName}'s Statistics for ${year}`
                 : `Server Statistics for ${year}`}
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            {isAuthenticated && (
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-800/80 backdrop-blur-sm rounded-xl border border-gray-700">
+                <span className="text-gray-400 text-xs md:text-sm whitespace-nowrap">Global</span>
+                <button
+                  onClick={() => setShowPersonalized(!showPersonalized)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-jellyfin-blue focus:ring-offset-2 focus:ring-offset-gray-800 ${
+                    showPersonalized ? 'bg-jellyfin-blue' : 'bg-gray-600'
+                  }`}
+                  role="switch"
+                  aria-checked={showPersonalized}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      showPersonalized ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+                <span className="text-gray-400 text-xs md:text-sm whitespace-nowrap">Personal</span>
+              </div>
+            )}
             <select
               value={year}
               onChange={(e) => setYear(parseInt(e.target.value))}
@@ -218,7 +293,7 @@ export default function Home() {
 
         {/* Stats Display */}
         {!loading && stats && (
-          <StatsDisplay stats={stats} />
+          <StatsDisplay stats={stats} showPersonalized={showPersonalized} userId={userId} year={year} />
         )}
       </div>
     </main>
