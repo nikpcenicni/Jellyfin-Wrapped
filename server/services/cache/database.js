@@ -92,7 +92,7 @@ function getCache(statType, year, userId = null) {
 /**
  * Set cache data
  */
-function setCache(statType, year, data, userId = null, ttlDays = 30) {
+function setCache(statType, year, data, userId = null, ttlDays = 1095) {
   return new Promise((resolve, reject) => {
     if (!db) {
       resolve();
@@ -164,7 +164,7 @@ function getWrappedCache(year, userId = null, language = 'en') {
 /**
  * Set cached wrapped insights (with language support)
  */
-function setWrappedCache(year, data, userId = null, language = 'en', ttlDays = 365) {
+function setWrappedCache(year, data, userId = null, language = 'en', ttlDays = 1095) {
   return new Promise((resolve, reject) => {
     if (!db) {
       resolve();

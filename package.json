@@ -16,8 +16,8 @@
     "wrapped",
     "statistics"
   ],
-  "author": "",
-  "license": "MIT",
+  "author": "Jellyfin Wrapped Contributors",
+  "license": "GPL-2.0",
   "dependencies": {
     "axios": "^1.7.9",
     "better-sqlite3": "^11.7.0",

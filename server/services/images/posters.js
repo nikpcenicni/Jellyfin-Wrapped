@@ -12,11 +12,9 @@ const { getItemDetails, getShowIdFromEpisode } = require('../jellyfin/items');
 async function getItemPosterUrlByItemId(itemId, itemType) {
   try {
     if (!itemId) {
-      console.log(`[getItemPosterUrlByItemId] No itemId provided for type ${itemType}`);
       return null;
     }
     
-    console.log(`[getItemPosterUrlByItemId] Starting lookup for itemId: ${itemId}, type: ${itemType}`);
     let targetItemId = itemId;
     let item = null;
     let imageType = 'Primary';
@@ -24,33 +22,26 @@ async function getItemPosterUrlByItemId(itemId, itemType) {
     
     // For TV shows aggregated from episodes, we need to get the actual show ID
     if (itemType === 'Series' || itemType === 'Episode') {
-      console.log(`[getItemPosterUrlByItemId] Traversing hierarchy for TV show - starting with episodeId: ${itemId}`);
       // Try to get show ID if this is an episode ID
       const showId = await getShowIdFromEpisode(itemId);
       if (showId) {
-        console.log(`[getItemPosterUrlByItemId] Found show ID: ${showId}`);
         targetItemId = showId;
         item = await getItemDetails(showId);
       } else {
-        console.log(`[getItemPosterUrlByItemId] Hierarchy traversal failed, trying original itemId: ${itemId}`);
         // If traversal failed, try the original itemId
         item = await getItemDetails(itemId);
       }
     } else {
       // For movies, get item details directly
-      console.log(`[getItemPosterUrlByItemId] Direct lookup for movie: ${itemId}`);
       item = await getItemDetails(targetItemId);
     }
 
     // Try to get image from the item itself
     if (item) {
-      console.log(`[getItemPosterUrlByItemId] Item found: ${item.Name || 'Unknown'}, ImageTags available: ${!!item.ImageTags}`);
-      
       // Check if item has ImageTags with Primary image
       if (item.ImageTags && item.ImageTags.Primary) {
         imageTag = item.ImageTags.Primary;
         imageType = 'Primary';
-        console.log(`[getItemPosterUrlByItemId] Found Primary image tag: ${imageTag} for ${targetItemId}`);
       } else if (item.ImageTags) {
         // If no primary image, try other image types
         const imageTypes = ['Backdrop', 'Thumb', 'Logo'];
@@ -58,7 +49,6 @@ async function getItemPosterUrlByItemId(itemId, itemType) {
           if (item.ImageTags[imgType]) {
             imageTag = item.ImageTags[imgType];
             imageType = imgType;
-            console.log(`[getItemPosterUrlByItemId] Found ${imgType} image tag: ${imageTag} for ${targetItemId}`);
             break;
           }
         }
@@ -78,15 +68,12 @@ async function getItemPosterUrlByItemId(itemId, itemType) {
       }
       
       const proxyUrl = `/api/image?${proxyParams.toString()}`;
-      console.log(`[getItemPosterUrlByItemId] Generated proxy URL for ${targetItemId}: ${proxyUrl}`);
       return proxyUrl;
-    } else {
-      console.log(`[getItemPosterUrlByItemId] Item not found for itemId: ${itemId}`);
     }
     
     return null;
   } catch (error) {
-    console.error(`[getItemPosterUrlByItemId] Error getting poster for item ${itemId}:`, error.message, error.stack);
+    console.error(`[getItemPosterUrlByItemId] Error getting poster for item ${itemId}:`, error.message);
     return null;
   }
 }
@@ -113,10 +100,8 @@ async function getItemPosterUrl(itemId, itemName, itemType) {
     // First, try to get poster directly from Jellyfin using ItemId
     if (itemId) {
       try {
-        console.log(`[getItemPosterUrl] Attempting ItemId lookup for ${itemName} (${itemId}, ${itemType})`);
         const jellyfinUrl = await getItemPosterUrlByItemId(itemId, itemType);
         if (jellyfinUrl) {
-          console.log(`[getItemPosterUrl] Successfully got URL from ItemId: ${jellyfinUrl}`);
           return jellyfinUrl;
         }
       } catch (error) {
@@ -215,19 +200,15 @@ async function getItemPosterUrl(itemId, itemName, itemType) {
  * @returns {Promise<Array>} Enriched items with PosterUrl property
  */
 async function enrichItemsWithPosters(items) {
-  console.log(`[enrichItemsWithPosters] Starting enrichment for ${items.length} items`);
   // Process items in batches to avoid overwhelming the API
   const batchSize = 3;
   const enrichedItems = [];
   
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize);
-    console.log(`[enrichItemsWithPosters] Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(items.length/batchSize)}`);
     const enrichedBatch = await Promise.all(
       batch.map(async (item) => {
-        console.log(`[enrichItemsWithPosters] Enriching: ${item.ItemName || item.SeriesName} (${item.ItemId})`);
         const posterUrl = await getItemPosterUrl(item.ItemId, item.ItemName || item.SeriesName, item.ItemType);
-        console.log(`[enrichItemsWithPosters] Result for ${item.ItemName || item.SeriesName}: ${posterUrl ? 'Got URL' : 'No URL'}`);
         return {
           ...item,
           PosterUrl: posterUrl
@@ -242,8 +223,6 @@ async function enrichItemsWithPosters(items) {
     }
   }
   
-  const urlCount = enrichedItems.filter(item => item.PosterUrl).length;
-  console.log(`[enrichItemsWithPosters] Completed - ${urlCount}/${items.length} items have poster URLs`);
   return enrichedItems;
 }
 

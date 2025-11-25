@@ -14,6 +14,7 @@ interface Stats {
   topShows: any[]
   monthlyActivity: any[]
   totalWatchTime: any[]
+  previousYearTotalWatchTime?: any[]
   mediaTypeComparison?: any[]
   preferredMediaType?: {
     type: string
@@ -80,7 +81,10 @@ export default function StatsDisplay({ stats, showPersonalized = false, userId =
           variants={itemVariants}
           transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
         >
-          <TotalWatchTimeCard totalWatchTime={totalWatchTime} />
+          <TotalWatchTimeCard 
+            totalWatchTime={totalWatchTime} 
+            previousYearTotalWatchTime={stats.previousYearTotalWatchTime}
+          />
         </motion.div>
       )}
 

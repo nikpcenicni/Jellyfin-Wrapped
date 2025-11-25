@@ -1,17 +1,17 @@
 services:
   jellyfin-wrapped:
-    build: .
+    # Replace 'your-username' with your GitHub username or Docker Hub username
+    # Option 1: Use GitHub Container Registry (recommended)
+    # image: ghcr.io/your-username/jellyfin-wrapped:latest
+    # Option 2: Use Docker Hub (uncomment and comment out Option 1)
+    image: nikpcenicni/jellyfin-wrapped:latest
     ports:
       - "3000:80"
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - NEXT_PORT=3001
       - JELLYFIN_SERVER_URL=${JELLYFIN_SERVER_URL}
       - JELLYFIN_API_KEY=${JELLYFIN_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - TMDB_API_KEY=${TMDB_API_KEY}
-      - API_URL=http://localhost:3000
     volumes:
       - ./data:/app/data
     restart: unless-stopped

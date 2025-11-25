@@ -45,10 +45,7 @@ RUN mkdir -p ./public
 COPY nginx.conf /etc/nginx/http.d/default.conf
 
 # Environment variables (should be provided via docker-compose or runtime)
-ENV NODE_ENV=production
-ENV PORT=3000
-ENV NEXT_PORT=3001
-ENV API_URL=http://localhost:3000
+# Note: PORT and NEXT_PORT are hardcoded in docker-entrypoint.sh and nginx.conf for internal routing
 
 # Expose port (nginx will handle routing)
 EXPOSE 80

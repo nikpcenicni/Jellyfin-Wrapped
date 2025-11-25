@@ -9,8 +9,6 @@ import LoginButton from './components/LoginButton'
 import LanguageSelector from './components/LanguageSelector'
 import WrappedExperience from './components/WrappedExperience'
 import ComingSoon from './components/ComingSoon'
-// Temporarily disabled reveal sequence
-// import RevealSequence from './components/RevealSequence'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +18,7 @@ interface Stats {
   topShows: any[]
   monthlyActivity: any[]
   totalWatchTime: any[]
+  previousYearTotalWatchTime?: any[]
   mediaTypeComparison?: any[]
   preferredMediaType?: {
     type: string
@@ -45,9 +44,6 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [year, setYear] = useState(new Date().getFullYear())
-  // Temporarily disabled reveal sequence
-  // const [revealComplete, setRevealComplete] = useState(false)
-  // const [hasShownReveal, setHasShownReveal] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [userName, setUserName] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
@@ -197,6 +193,7 @@ export default function Home() {
             
             if (endpoint.key === 'totalWatchTime') {
               updated.totalWatchTime = response.data.totalWatchTime || []
+              updated.previousYearTotalWatchTime = response.data.previousYearTotalWatchTime || null
             } else if (endpoint.key === 'topMovies') {
               updated.topMovies = response.data.topMovies || []
             } else if (endpoint.key === 'topShows') {
@@ -273,11 +270,6 @@ export default function Home() {
     }
   }
 
-  // Temporarily disabled reveal sequence
-  // const handleRevealComplete = () => {
-  //   setRevealComplete(true)
-  // }
-
   return (
     <main className="min-h-screen bg-gradient-to-br from-jellyfin-darker via-jellyfin-dark to-gray-900 relative overflow-hidden">
       {/* Background elements */}
@@ -285,11 +277,6 @@ export default function Home() {
         <div className="absolute top-0 left-1/4 w-64 h-64 md:w-96 md:h-96 bg-jellyfin-blue/10 rounded-full blur-3xl"></div>
         <div className="absolute bottom-0 right-1/4 w-64 h-64 md:w-96 md:h-96 bg-purple-600/10 rounded-full blur-3xl"></div>
       </div>
-
-      {/* Temporarily disabled reveal sequence */}
-      {/* {stats && hasShownReveal && !revealComplete && isAuthenticated && (
-        <RevealSequence stats={stats} useCase="personal" onComplete={handleRevealComplete} />
-      )} */}
 
       {/* Wrapped Experience */}
       {showWrapped && stats && (

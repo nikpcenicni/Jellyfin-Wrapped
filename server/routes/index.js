@@ -1,7 +1,7 @@
 const config = require('../config');
 const { executeQuery, executeQueryForUser } = require('../services/jellyfin/queries');
 const { enrichItemsWithPosters } = require('../services/images/posters');
-const { generateIntroMessages, generateWrappedInsights } = require('../services/ai/openai');
+const { generateWrappedInsights } = require('../services/ai/openai');
 const { getItemDetails } = require('../services/jellyfin/items');
 const { transformToObjects, deduplicateShows, validateAndSanitizeUserId } = require('../utils/transform');
 const { getCache, setCache, getWrappedCache, setWrappedCache } = require('../services/cache/database');
@@ -22,8 +22,6 @@ const {
 // Using native fetch (available in Node 20+)
 
 // Constants
-const VALID_USE_CASES = ['global', 'server', 'personal', 'user', 'family'];
-const DEFAULT_USE_CASE = 'global';
 const IMAGE_CACHE_MAX_AGE = 86400; // 24 hours
 const DEFAULT_IMAGE_TYPE = 'Primary';
 const DEFAULT_IMAGE_MAX_WIDTH = '300';
@@ -233,24 +231,6 @@ const handleHealthCheck = (req, res) => {
   });
 };
 
-const handleIntro = async (req, res) => {
-  try {
-    const { stats, useCase } = req.body;
-
-    if (!stats) {
-      return res.status(400).json({ error: 'Stats data is required' });
-    }
-
-    const validatedUseCase = VALID_USE_CASES.includes(useCase) ? useCase : DEFAULT_USE_CASE;
-    const messages = await generateIntroMessages(stats, validatedUseCase);
-
-    // Always return an array (never null) - static messages are the default
-    res.json({ messages: messages || [] });
-  } catch (error) {
-    handleError(res, error, 'Failed to generate intro messages');
-  }
-};
-
 const handleWrappedInsights = async (req, res) => {
   try {
     const { stats, language, userName, userId } = req.body;
@@ -292,8 +272,8 @@ const handleWrappedInsights = async (req, res) => {
     const insights = await generateWrappedInsights(stats, lang, userName);
 
     if (insights && insights.length > 0) {
-      // Cache the insights (1 year TTL since wrapped is yearly)
-      await setWrappedCache(year, { slides: insights }, cacheUserId, lang, 365).catch(err => {
+      // Cache the insights (3 year TTL since wrapped is yearly)
+      await setWrappedCache(year, { slides: insights }, cacheUserId, lang, 1095).catch(err => {
         console.error('[Wrapped Cache] Failed to cache insights:', err);
       });
     }
@@ -355,8 +335,8 @@ const fetchStatWithCache = async (statType, year, userId, accessToken, fetchFn) 
   console.log(`[Cache] Miss for ${statType} (year: ${year}, user: ${userId || 'global'})`);
   const data = await fetchFn();
   
-  // Cache the result (30 day TTL)
-  await setCache(statType, year, data, userId, 30).catch(err => {
+  // Cache the result (3 year TTL)
+  await setCache(statType, year, data, userId, 1095).catch(err => {
     console.error(`[Cache] Failed to cache ${statType}:`, err);
   });
   
@@ -470,172 +450,6 @@ const fetchTopMovieYears = async (year, userId = null, accessToken = null) => {
   });
   
   return topMovieYears.length > 0 ? topMovieYears : null;
-};
-
-const fetchStatsData = async (year, userId = null, accessToken = null) => {
-  const queries = {
-    topMovies: buildTopMoviesQuery(year, userId),
-    topShows: buildTopShowsQuery(year, userId),
-    monthlyActivity: buildMonthlyActivityQuery(year, userId),
-    totalWatchTime: buildTotalWatchTimeQuery(year, userId),
-    mediaTypeComparison: buildMediaTypeComparisonQuery(year, userId),
-    topMovieIdsForYear: buildTopMovieIdsForYearAnalysisQuery(year, userId, 50),
-    topMovieIdsForGenre: buildTopMovieIdsForGenreAnalysisQuery(year, userId, 100)
-  };
-
-  const executeArgs = accessToken 
-    ? (query) => executeQueryForUser(query, accessToken)
-    : (query) => executeQuery(query, true);
-
-  // Execute all SQL queries in parallel
-  const [
-    topMoviesResponse,
-    topShowsResponse,
-    monthlyActivityResponse,
-    totalWatchTimeResponse,
-    mediaTypeComparisonResponse,
-    topMovieIdsForYearResponse,
-    topMovieIdsForGenreResponse
-  ] = await Promise.all([
-    executeArgs(queries.topMovies),
-    executeArgs(queries.topShows),
-    executeArgs(queries.monthlyActivity),
-    executeArgs(queries.totalWatchTime),
-    executeArgs(queries.mediaTypeComparison),
-    executeArgs(queries.topMovieIdsForYear),
-    executeArgs(queries.topMovieIdsForGenre)
-  ]);
-
-  let topMovies = transformToObjects(topMoviesResponse);
-  let topShows = transformToObjects(topShowsResponse);
-  const monthlyActivity = transformToObjects(monthlyActivityResponse);
-  const totalWatchTime = transformToObjects(totalWatchTimeResponse);
-  const mediaTypeComparison = transformToObjects(mediaTypeComparisonResponse);
-  const topMovieIdsForYear = transformToObjects(topMovieIdsForYearResponse);
-  const topMovieIdsForGenre = transformToObjects(topMovieIdsForGenreResponse);
-
-  topShows = deduplicateShows(topShows).slice(0, TOP_ITEMS_LIMIT);
-
-  // Enrich items with posters and analyze additional stats in parallel
-  const [enrichedMovies, enrichedShows, topGenres, topMovieYears] = await Promise.all([
-    enrichItemsWithPosters(topMovies),
-    enrichItemsWithPosters(topShows),
-    analyzeGenres(topMovieIdsForGenre).catch(err => {
-      console.error('[fetchStatsData] Error analyzing genres:', err);
-      return [];
-    }),
-    analyzeMovieYears(topMovieIdsForYear).catch(err => {
-      console.error('[fetchStatsData] Error analyzing movie years:', err);
-      return [];
-    })
-  ]);
-
-  // Determine which media type was watched more
-  const moviesData = mediaTypeComparison.find(m => m.MediaType === 'Movies');
-  const showsData = mediaTypeComparison.find(m => m.MediaType === 'Shows');
-  
-  let preferredMediaType = null;
-  if (moviesData && showsData) {
-    const moviesHours = moviesData.TotalHours || 0;
-    const showsHours = showsData.TotalHours || 0;
-    preferredMediaType = {
-      type: moviesHours > showsHours ? 'Movies' : 'Shows',
-      movies: {
-        hours: moviesHours,
-        plays: moviesData.PlayCount || 0,
-        uniqueItems: moviesData.UniqueItems || 0
-      },
-      shows: {
-        hours: showsHours,
-        plays: showsData.PlayCount || 0,
-        uniqueItems: showsData.UniqueItems || 0
-      }
-    };
-  }
-
-  return {
-    year,
-    topMovies: enrichedMovies,
-    topShows: enrichedShows,
-    monthlyActivity,
-    totalWatchTime,
-    mediaTypeComparison,
-    preferredMediaType,
-    topGenres: topGenres.length > 0 ? topGenres : null,
-    topMovieYears: topMovieYears.length > 0 ? topMovieYears : null
-  };
-};
-
-const handleStats = async (req, res) => {
-  try {
-    const year = getYearFromQuery(req.query);
-    const lockCheck = isYearLocked(year);
-    
-    if (lockCheck.locked) {
-      const unlockDateStr = lockCheck.unlockDate.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
-      return res.status(403).json({ 
-        error: 'Wrapped for the current year is locked',
-        message: `Wrapped statistics for ${year} will be available starting on the last Friday of November (${unlockDateStr}).`,
-        unlockDate: lockCheck.unlockDate.toISOString()
-      });
-    }
-    
-    const stats = await fetchStatsData(year);
-    res.json(stats);
-  } catch (error) {
-    handleError(res, error, 'Failed to fetch statistics');
-  }
-};
-
-const handlePersonalStats = async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authentication required. Please provide access token.' });
-    }
-
-    const accessToken = authHeader.substring(7);
-    const userId = req.query.userId?.trim();
-    const validation = validateAndSanitizeUserId(userId);
-
-    if (!validation.valid) {
-      return res.status(400).json({
-        error: validation.error,
-        ...(validation.received && { received: validation.received, length: validation.length })
-      });
-    }
-
-    const year = getYearFromQuery(req.query);
-    const lockCheck = isYearLocked(year);
-    
-    if (lockCheck.locked) {
-      const unlockDateStr = lockCheck.unlockDate.toLocaleDateString('en-US', { 
-        weekday: 'long', 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
-      return res.status(403).json({ 
-        error: 'Wrapped for the current year is locked',
-        message: `Wrapped statistics for ${year} will be available starting on the last Friday of November (${unlockDateStr}).`,
-        unlockDate: lockCheck.unlockDate.toISOString()
-      });
-    }
-    
-    const stats = await fetchStatsData(year, validation.sanitized, accessToken);
-    
-    res.json({
-      ...stats,
-      isPersonalized: true
-    });
-  } catch (error) {
-    handleError(res, error, 'Failed to fetch personalized statistics');
-  }
 };
 
 const handleUserRanking = async (req, res) => {
@@ -765,7 +579,26 @@ const handleStatTotalWatchTime = async (req, res) => {
       () => fetchTotalWatchTime(year, userId, accessToken)
     );
     
-    res.json({ totalWatchTime: data });
+    // Fetch previous year data for comparison
+    const previousYear = year - 1;
+    let previousYearData = null;
+    try {
+      previousYearData = await fetchStatWithCache(
+        'totalWatchTime',
+        previousYear,
+        userId,
+        accessToken,
+        () => fetchTotalWatchTime(previousYear, userId, accessToken)
+      );
+    } catch (err) {
+      // If previous year data doesn't exist, that's okay - just continue without comparison
+      console.log(`[TotalWatchTime] No data available for previous year ${previousYear}`);
+    }
+    
+    res.json({ 
+      totalWatchTime: data,
+      previousYearTotalWatchTime: previousYearData 
+    });
   } catch (error) {
     handleError(res, error, 'Failed to fetch total watch time');
   }
@@ -1114,13 +947,10 @@ const handleQuickConnectAuthenticate = async (req, res) => {
 function attachRoutes(app) {
   // Health & Utility Routes
   app.get('/api/health', handleHealthCheck);
-  app.post('/api/intro', handleIntro);
   app.post('/api/wrapped/insights', handleWrappedInsights);
   app.get('/api/image', handleImageProxy);
 
   // Statistics Routes
-  app.get('/api/stats', handleStats);
-  app.get('/api/stats/personal', handlePersonalStats);
   app.get('/api/stats/ranking', handleUserRanking);
   
   // Individual stat endpoints for progressive loading

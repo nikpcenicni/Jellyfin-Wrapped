@@ -10,7 +10,7 @@ const { getUserId } = require('./users');
 async function getItemDetails(itemId) {
   try {
     if (!itemId || !config.jellyfin.serverUrl || !config.jellyfin.apiKey) {
-      console.log(`[getItemDetails] Missing required params - itemId: ${!!itemId}, server: ${!!config.jellyfin.serverUrl}, key: ${!!config.jellyfin.apiKey}`);
+      // Missing required configuration - fail silently in production
       return null;
     }
 
@@ -28,26 +28,19 @@ async function getItemDetails(itemId) {
 
     // Include userId as query parameter per API docs
     const url = `${config.jellyfin.serverUrl}/Items/${itemId}?userId=${userId}`;
-    console.log(`[getItemDetails] Fetching item: ${itemId} with userId: ${userId}`);
     const response = await fetch(url, {
       method: 'GET',
       headers: headers
     });
-
-    console.log(`[getItemDetails] Response status: ${response.status} for ${itemId}`);
     
     if (response.ok) {
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
-        console.log(`[getItemDetails] Success - Item: ${data.Name || 'Unknown'}, Type: ${data.Type}, HasImageTags: ${!!data.ImageTags}`);
         return data;
-      } else {
-        console.log(`[getItemDetails] Unexpected content-type: ${contentType} for ${itemId}`);
       }
     } else if (response.status === 404) {
       // Item not found - this is expected for some items
-      console.log(`[getItemDetails] Item not found (404): ${itemId}`);
       return null;
     } else {
       // Log unexpected errors but don't fail loudly

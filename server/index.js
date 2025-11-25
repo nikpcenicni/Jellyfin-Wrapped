@@ -39,7 +39,7 @@ app.get('/api/health', (req, res) => {
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Jellyfin Server: ${config.jellyfin.serverUrl}`);
+  // Jellyfin server URL is configured (not logged for security)
 });
 
 module.exports = app;

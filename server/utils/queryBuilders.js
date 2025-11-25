@@ -347,7 +347,6 @@ const buildUserRankingShowsQuery = (year) => {
 };
 
 module.exports = {
-  buildYearFilter,
   buildTopMoviesQuery,
   buildTopShowsQuery,
   buildMonthlyActivityQuery,

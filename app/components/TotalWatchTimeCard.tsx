@@ -12,14 +12,47 @@ interface TotalWatchTime {
 
 interface TotalWatchTimeCardProps {
   totalWatchTime: TotalWatchTime
+  previousYearTotalWatchTime?: TotalWatchTime[]
 }
 
-export default function TotalWatchTimeCard({ totalWatchTime }: TotalWatchTimeCardProps) {
+// Helper function to calculate percentage change
+function calculateChange(current: number, previous: number): { value: number; isIncrease: boolean } | null {
+  if (!previous || previous === 0) return null
+  const change = ((current - previous) / previous) * 100
+  return {
+    value: Math.abs(change),
+    isIncrease: change > 0
+  }
+}
+
+export default function TotalWatchTimeCard({ totalWatchTime, previousYearTotalWatchTime }: TotalWatchTimeCardProps) {
   const t = useTranslations()
+  const previousYear = previousYearTotalWatchTime?.[0] || null
+  
+  // Calculate comparisons
+  const hoursChange = previousYear ? calculateChange(totalWatchTime.TotalHours || 0, previousYear.TotalHours || 0) : null
+  const playsChange = previousYear ? calculateChange(totalWatchTime.TotalPlays || 0, previousYear.TotalPlays || 0) : null
+  const itemsChange = previousYear ? calculateChange(totalWatchTime.UniqueItems || 0, previousYear.UniqueItems || 0) : null
+  
   const stats = [
-    { label: t('stats.totalHours'), value: formatHours(totalWatchTime.TotalHours || 0), icon: '⏱️' },
-    { label: t('stats.totalPlays'), value: totalWatchTime.TotalPlays?.toLocaleString() || 0, icon: '▶️' },
-    { label: t('stats.uniqueItems'), value: totalWatchTime.UniqueItems?.toLocaleString() || 0, icon: '📚' },
+    { 
+      label: t('stats.totalHours'), 
+      value: formatHours(totalWatchTime.TotalHours || 0), 
+      icon: '⏱️',
+      change: hoursChange
+    },
+    { 
+      label: t('stats.totalPlays'), 
+      value: totalWatchTime.TotalPlays?.toLocaleString() || 0, 
+      icon: '▶️',
+      change: playsChange
+    },
+    { 
+      label: t('stats.uniqueItems'), 
+      value: totalWatchTime.UniqueItems?.toLocaleString() || 0, 
+      icon: '📚',
+      change: itemsChange
+    },
   ]
 
   const containerVariants = {
@@ -76,8 +109,18 @@ export default function TotalWatchTimeCard({ totalWatchTime }: TotalWatchTimeCar
               <span>{stat.icon}</span>
               {stat.label}
             </div>
-            <div className="text-2xl md:text-4xl font-bold text-white bg-gradient-to-r from-white to-jellyfin-blue bg-clip-text text-transparent">
-              {stat.value}
+            <div className="flex items-baseline gap-2 md:gap-3">
+              <div className="text-2xl md:text-4xl font-bold text-white bg-gradient-to-r from-white to-jellyfin-blue bg-clip-text text-transparent">
+                {stat.value}
+              </div>
+              {stat.change && (
+                <div className={`flex items-center gap-1 text-sm md:text-base font-semibold ${
+                  stat.change.isIncrease ? 'text-green-500' : 'text-red-500'
+                }`}>
+                  <span>{stat.change.isIncrease ? '↑' : '↓'}</span>
+                  <span>{stat.change.value.toFixed(1)}%</span>
+                </div>
+              )}
             </div>
           </motion.div>
         ))}

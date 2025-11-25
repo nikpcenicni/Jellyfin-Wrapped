@@ -1,124 +1,312 @@
 # Jellyfin Wrapped
 
+[![Build Status](https://github.com/nikpcenicni/Jellyfin-Wrapped/workflows/CI/badge.svg)](https://github.com/nikpcenicni/Jellyfin-Wrapped/actions)
+[![Docker Hub](https://img.shields.io/docker/pulls/nikpcenicni/jellyfin-wrapped.svg)](https://hub.docker.com/r/nikpcenicni/jellyfin-wrapped)
+[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
+
 A beautiful single-page web application that displays server-wide statistics from your Jellyfin media server, excluding usernames for privacy. Built with Next.js, Tailwind CSS, and deployed via Docker.
+
+## Table of Contents
+
+- [Jellyfin Wrapped](#jellyfin-wrapped)
+  - [Table of Contents](#table-of-contents)
+  - [Features](#features)
+  - [Screenshots](#screenshots)
+  - [Installation](#installation)
+    - [Prerequisites](#prerequisites)
+    - [Quick Start with Docker](#quick-start-with-docker)
+    - [Manual Installation](#manual-installation)
+  - [Configuration](#configuration)
+    - [Environment Variables](#environment-variables)
+    - [Docker Image Options](#docker-image-options)
+  - [Development](#development)
+    - [Development Setup](#development-setup)
+    - [Project Structure](#project-structure)
+    - [Running the Application](#running-the-application)
+  - [API Documentation](#api-documentation)
+    - [Health Check](#health-check)
+    - [Statistics Endpoints](#statistics-endpoints)
+    - [Authentication Endpoints](#authentication-endpoints)
+    - [Other Endpoints](#other-endpoints)
+  - [Contributing](#contributing)
+    - [Development Guidelines](#development-guidelines)
+  - [CI/CD](#cicd)
+    - [Setting up GitHub Actions](#setting-up-github-actions)
+    - [Pulling Images](#pulling-images)
+  - [License](#license)
 
 ## Features
 
-- 🎬 Server-wide statistics display (no usernames)
-- 📊 Top movies and TV shows
-- 📅 Monthly activity overview
-- ⏱️ Total watch time analytics
-- 🔐 Login button for future personalized stats
-- 🐳 Docker containerized deployment
+- 🎬 **Server-wide statistics display** - Aggregate statistics without exposing usernames
+- 📊 **Top movies and TV shows** - Discover the most-watched content on your server
+- 📅 **Monthly activity overview** - Track viewing patterns throughout the year
+- ⏱️ **Total watch time analytics** - See cumulative viewing statistics
+- 🌍 **Multi-language support** - Internationalization with next-intl
+- 🔐 **User authentication** - Login functionality for future personalized stats
+- 🐳 **Docker containerized deployment** - Easy deployment with Docker Compose
+- 🎨 **Modern UI** - Beautiful, responsive design with Tailwind CSS and Framer Motion
 
+## Screenshots
 
-## Prerequisites
+<!-- Screenshots coming soon -->
+
+## Installation
+
+### Prerequisites
 
 - Docker and Docker Compose (for containerized deployment)
 - Jellyfin server with User Usage Stats plugin installed
-- Jellyfin API key
+- Jellyfin API key (generate from your Jellyfin server settings)
 
-## Quick Start with Docker
+### Quick Start with Docker
 
-1. Clone this repository:
-```bash
-git clone <repository-url>
-cd Jellyfin-Wrapped
-```
+1. **Clone this repository:**
+   ```bash
+   git clone https://github.com/nikpcenicni/Jellyfin-Wrapped.git
+   cd Jellyfin-Wrapped
+   ```
 
-2. Create a `.env` file (or copy from `.env.example`):
-```bash
-cp .env.example .env
-```
+2. **Create a `.env` file:**
+   ```bash
+   cp example.env .env
+   ```
 
-3. Edit `.env` with your configuration:
-```env
-JELLYFIN_SERVER_URL=http://your-jellyfin-server:8096
-JELLYFIN_API_KEY=your-api-key-here
-OPENAI_API_KEY=your-openai-key-here  # Optional, for future features
-TMDB_API_KEY=your-tmdb-api-key-here  # Optional, for poster images (get free at https://www.themoviedb.org/settings/api)
-```
+3. **Edit `.env` with your configuration:**
+   ```env
+   JELLYFIN_SERVER_URL=http://your-jellyfin-server:8096
+   JELLYFIN_API_KEY=your-api-key-here
+   OPENAI_API_KEY=your-openai-key-here  # Optional, for future features
+   TMDB_API_KEY=your-tmdb-api-key-here  # Optional, for poster images
+   ```
 
-4. Build and run with Docker Compose:
-```bash
-docker-compose up -d
-```
+4. **Build and run with Docker Compose:**
+   ```bash
+   docker-compose up -d
+   ```
 
-5. Open your browser to `http://localhost:3000`
+5. **Access the application:**
+   Open your browser to `http://localhost:3000`
 
-## Development Setup
+### Manual Installation
 
-### Install Dependencies
+If you prefer to run without Docker:
 
-```bash
-# Install root dependencies
-npm install
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
-# Install client dependencies
-cd client && npm install
-```
+2. **Set up environment variables:**
+   ```bash
+   cp example.env .env
+   # Edit .env with your configuration
+   ```
 
-### Run Development Servers
+3. **Build the application:**
+   ```bash
+   npm run build
+   ```
 
-```bash
-# From root directory - runs both frontend and backend
-npm run dev
-
-# Or run separately:
-# Terminal 1: Backend API
-npm run server
-
-# Terminal 2: Next.js Frontend
-npm run client
-```
-
-- Backend API: http://localhost:3000
-- Next.js Frontend: http://localhost:3001 (proxies API calls to backend)
+4. **Start the server:**
+   ```bash
+   npm start
+   ```
 
 ## Configuration
 
 ### Environment Variables
 
-- `JELLYFIN_SERVER_URL` - Your Jellyfin server URL (required)
-- `JELLYFIN_API_KEY` - Your Jellyfin API key (required)
-- `OPENAI_API_KEY` - OpenAI API key (optional, for future enhancements)
-- `TMDB_API_KEY` - TMDB (The Movie Database) API key (optional, for poster images - get free at https://www.themoviedb.org/settings/api)
-- `PORT` - Backend server port (default: 3000)
-- `API_URL` - API URL for Next.js rewrites (default: http://localhost:3000)
+| Variable | Required | Description | Default |
+|----------|----------|-------------|---------|
+| `JELLYFIN_SERVER_URL` | Yes | Your Jellyfin server URL | - |
+| `JELLYFIN_API_KEY` | Yes | Your Jellyfin API key | - |
+| `OPENAI_API_KEY` | No | OpenAI API key for future enhancements | - |
+| `TMDB_API_KEY` | No | TMDB API key for poster images ([Get free key](https://www.themoviedb.org/settings/api)) | - |
 
-## Project Structure
+### Docker Image Options
 
-```
-├── client/                 # Next.js frontend application
-│   ├── app/               # Next.js app directory (App Router)
-│   │   ├── components/    # Next.js components
-│   │   ├── layout.tsx     # Root layout
-│   │   └── page.tsx       # Home page
-│   └── package.json
-├── server/                # Express backend API
-│   └── index.js          # API server
-├── docker-compose.yml     # Docker Compose configuration
-├── Dockerfile            # Multi-stage Docker build
-└── package.json          # Root package.json
+The application is available from multiple registries:
+
+**GitHub Container Registry (Recommended):**
+```bash
+docker pull ghcr.io/nikpcenicni/jellyfin-wrapped:latest
 ```
 
-## API Endpoints
+**Docker Hub:**
+```bash
+docker pull nikpcenicni/jellyfin-wrapped:latest
+```
 
+Update `docker-compose.yml` to use your preferred image source.
+
+## Development
+
+### Development Setup
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/nikpcenicni/Jellyfin-Wrapped.git
+   cd Jellyfin-Wrapped
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Set up environment variables:**
+   ```bash
+   cp example.env .env
+   # Edit .env with your development configuration
+   ```
+
+4. **Run development servers:**
+   ```bash
+   # Run both frontend and backend concurrently
+   npm run dev
+
+   # Or run separately:
+   # Terminal 1: Backend API
+   npm run server
+
+   # Terminal 2: Next.js Frontend
+   npm run client
+   ```
+
+5. **Access the application:**
+   - Backend API: http://localhost:3000
+   - Next.js Frontend: http://localhost:3001 (proxies API calls to backend)
+
+### Project Structure
+
+```
+Jellyfin-Wrapped/
+├── app/                      # Next.js frontend (App Router)
+│   ├── components/          # React components
+│   │   ├── ComingSoon.tsx
+│   │   ├── LanguageSelector.tsx
+│   │   ├── LoginButton.tsx
+│   │   ├── MediaList.tsx
+│   │   ├── MediaSection.tsx
+│   │   ├── PodiumDisplay.tsx
+│   │   ├── StatsDisplay.tsx
+│   │   ├── TotalWatchTimeCard.tsx
+│   │   ├── UserRanking.tsx
+│   │   ├── WrappedExperience.tsx
+│   │   └── utils.ts
+│   ├── globals.css          # Global styles
+│   ├── layout.tsx           # Root layout
+│   ├── page.tsx             # Home page
+│   └── providers.tsx        # React providers
+│
+├── server/                   # Express backend API
+│   ├── config/              # Configuration
+│   │   └── index.js
+│   ├── routes/              # API route handlers
+│   │   └── index.js
+│   ├── services/            # Business logic
+│   │   ├── jellyfin/       # Jellyfin API services
+│   │   │   ├── auth.js
+│   │   │   ├── items.js
+│   │   │   ├── queries.js
+│   │   │   └── users.js
+│   │   ├── images/         # Image handling
+│   │   │   └── posters.js
+│   │   ├── ai/             # AI/OpenAI services
+│   │   │   └── openai.js
+│   │   └── cache/          # Caching services
+│   │       ├── database.js
+│   │       └── sync.js
+│   ├── utils/               # Utility functions
+│   │   ├── queryBuilders.js
+│   │   └── transform.js
+│   └── index.js             # Server entry point
+│
+├── messages/                 # Internationalization files
+│   ├── de.json              # German translations
+│   ├── en.json              # English translations
+│   ├── es.json              # Spanish translations
+│   └── fr.json              # French translations
+│
+├── public/                   # Static assets
+│
+├── data/                     # Data directory (for SQLite cache)
+│
+├── docker-compose.yml        # Docker Compose configuration
+├── Dockerfile                # Multi-stage Docker build
+├── docker-entrypoint.sh      # Docker entry script
+├── nginx.conf                # Nginx configuration
+├── next.config.js            # Next.js configuration
+├── tailwind.config.js        # Tailwind CSS configuration
+├── tsconfig.json             # TypeScript configuration
+├── postcss.config.js         # PostCSS configuration
+└── package.json              # Dependencies (frontend + backend)
+```
+
+### Running the Application
+
+**Development mode:**
+```bash
+npm run dev
+```
+
+**Production build:**
+```bash
+npm run build
+npm start
+```
+
+**Linting:**
+```bash
+npm run lint
+```
+
+## API Documentation
+
+### Health Check
 - `GET /api/health` - Health check endpoint
-- `GET /api/stats?year=2024` - Get server-wide statistics for a year
-- `GET /api/stats/personal` - Get personalized stats (coming soon)
-- `POST /api/login` - User login (coming soon)
 
-## Future Enhancements
+### Statistics Endpoints
+- `GET /api/stats/total-watch-time?year=2024` - Get total watch time statistics
+- `GET /api/stats/top-movies?year=2024` - Get top movies
+- `GET /api/stats/top-shows?year=2024` - Get top TV shows
+- `GET /api/stats/monthly-activity?year=2024` - Get monthly activity
+- `GET /api/stats/media-type-comparison?year=2024` - Get movies vs shows comparison
+- `GET /api/stats/top-genres?year=2024` - Get top genres
+- `GET /api/stats/top-movie-years?year=2024` - Get top movie production years
+- `GET /api/stats/ranking?year=2024&userId=<userId>` - Get user ranking (requires authentication)
 
-- User authentication and personalized statistics
-- OpenAI integration for insights and recommendations
-- Additional visualizations and charts
-- Export statistics functionality
+### Authentication Endpoints
+- `POST /api/login` - User login
+- `POST /api/quick-connect/initiate` - Initiate Quick Connect
+- `GET /api/quick-connect/status?secret=<secret>` - Check Quick Connect status
+- `POST /api/quick-connect/authenticate` - Authenticate with Quick Connect
+
+### Other Endpoints
+- `POST /api/wrapped/insights` - Generate wrapped insights (AI-powered)
+- `GET /api/image?itemId=<id>` - Proxy for Jellyfin images
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. **Fork the repository**
+2. **Create your feature branch** (`git checkout -b feature/AmazingFeature`)
+3. **Commit your changes** (`git commit -m 'Add some AmazingFeature'`)
+4. **Push to the branch** (`git push origin feature/AmazingFeature`)
+5. **Open a Pull Request**
+
+### Development Guidelines
+
+- Follow the existing code style
+- Add comments for complex logic
+- Update documentation as needed
+- Test your changes thoroughly
+- Ensure all linting passes (`npm run lint`)
 
 ## CI/CD
 
-This project includes a GitHub Actions workflow that automatically builds and publishes Docker images to both GitHub Container Registry (ghcr.io) and Docker Hub when you push to the `main` branch or create version tags.
+This project includes GitHub Actions workflows that automatically build and publish Docker images to both GitHub Container Registry (ghcr.io) and Docker Hub when you push to the `main` branch or create version tags.
 
 ### Setting up GitHub Actions
 
@@ -126,13 +314,13 @@ This project includes a GitHub Actions workflow that automatically builds and pu
    - Go to your repository Settings → Secrets and variables → Actions
    - Add the following secrets:
      - `DOCKERHUB_USERNAME` - Your Docker Hub username
-     - `DOCKERHUB_TOKEN` - Your Docker Hub access token (create at https://hub.docker.com/settings/security)
+     - `DOCKERHUB_TOKEN` - Your Docker Hub access token ([create here](https://hub.docker.com/settings/security))
    
    Note: `GITHUB_TOKEN` is automatically provided by GitHub Actions and doesn't need to be configured.
 
 2. **Image Locations:**
-   - GitHub Container Registry: `ghcr.io/<your-username>/jellyfin-wrapped`
-   - Docker Hub: `docker.io/<your-username>/jellyfin-wrapped`
+   - GitHub Container Registry: `ghcr.io/nikpcenicni/jellyfin-wrapped`
+   - Docker Hub: `docker.io/nikpcenicni/jellyfin-wrapped`
 
 3. **Tagging:**
    - Pushes to `main` branch create a `latest` tag
@@ -143,12 +331,12 @@ This project includes a GitHub Actions workflow that automatically builds and pu
 
 ```bash
 # From GitHub Container Registry
-docker pull ghcr.io/<your-username>/jellyfin-wrapped:latest
+docker pull ghcr.io/nikpcenicni/jellyfin-wrapped:latest
 
 # From Docker Hub
-docker pull <your-username>/jellyfin-wrapped:latest
+docker pull nikpcenicni/jellyfin-wrapped:latest
 ```
 
 ## License
 
-MIT
+This project is licensed under the GNU General Public License v2.0 (GPL-2.0) - the same license as Jellyfin. See the [LICENSE](LICENSE) file for details.
