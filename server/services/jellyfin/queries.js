@@ -1,5 +1,5 @@
 const config = require('../../config');
-const fetch = globalThis.fetch || require('node-fetch');
+// Using native fetch (available in Node 20+)
 
 /**
  * Execute a query against Jellyfin User Usage Stats plugin

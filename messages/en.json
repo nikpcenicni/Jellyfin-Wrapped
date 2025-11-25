@@ -1,0 +1,73 @@
+{
+  "common": {
+    "loading": "Loading your year in review...",
+    "error": "Error",
+    "welcome": "Welcome, {name}",
+    "logout": "Logout",
+    "logoutConfirm": "Are you sure you want to log out?",
+    "login": "Login",
+    "cancel": "Cancel",
+    "close": "Close",
+    "save": "Save",
+    "year": "Year",
+    "hours": "hours",
+    "plays": "plays",
+    "items": "items"
+  },
+  "home": {
+    "title": "Jellyfin Wrapped",
+    "serverStats": "Server Statistics for {year}",
+    "personalStats": "{name}'s Statistics for {year}",
+    "errorLoading": "Error Loading Statistics",
+    "global": "Global",
+    "personal": "Personal"
+  },
+  "stats": {
+    "totalWatchTime": "Total Watch Time",
+    "totalHours": "Total Hours",
+    "totalPlays": "Total Plays",
+    "uniqueItems": "Unique Items",
+    "topMovies": "Top Movies",
+    "topShows": "Top TV Shows",
+    "moviesVsShows": "Movies vs TV Shows",
+    "movies": "Movies",
+    "tvShows": "TV Shows",
+    "winner": "Winner",
+    "topGenres": "Top Genres",
+    "mostPopularMovieYears": "Most Popular Movie Years",
+    "monthlyActivity": "Monthly Activity",
+    "yourRanking": "Your Ranking",
+    "allMedia": "All Media",
+    "rank": "Rank",
+    "yourWatchTime": "Your Watch Time"
+  },
+  "login": {
+    "title": "Login to Jellyfin",
+    "loginForPersonalized": "Login for Personalized Stats",
+    "usernamePassword": "Username & Password",
+    "quickConnect": "Quick Connect",
+    "username": "Username",
+    "password": "Password",
+    "enterUsername": "Enter your username",
+    "enterPassword": "Enter your password",
+    "loggingIn": "Logging in...",
+    "loginFailed": "Login failed. Please check your credentials.",
+    "quickConnectDescription": "Quick Connect allows you to log in by approving the connection on your Jellyfin app.",
+    "getCode": "Get Quick Connect Code",
+    "generatingCode": "Generating code...",
+    "enterCode": "Enter this code in your Jellyfin app to approve the connection:",
+    "waitingApproval": "Waiting for approval...",
+    "codeExpired": "Quick Connect code has expired. Please try again.",
+    "timeout": "Quick Connect timed out. Please try again.",
+    "failedToGetCode": "Failed to get Quick Connect code",
+    "failedToInitiate": "Failed to initiate Quick Connect",
+    "authenticationFailed": "Authentication failed"
+  },
+  "reveal": {
+    "message1": "Wow, there was a lot of media consumed this year!",
+    "message2": "Everyone consumed {hours}",
+    "message3": "That's {plays} total plays",
+    "message4": "From {items} unique items"
+  }
+}
+

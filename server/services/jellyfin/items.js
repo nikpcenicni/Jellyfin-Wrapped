@@ -1,6 +1,6 @@
 const config = require('../../config');
 const { getUserId } = require('./users');
-const fetch = globalThis.fetch || require('node-fetch');
+// Using native fetch (available in Node 20+)
 
 /**
  * Get item details by ItemId from Jellyfin

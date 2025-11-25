@@ -1,5 +1,5 @@
 const config = require('../../config');
-const fetch = globalThis.fetch || require('node-fetch');
+// Using native fetch (available in Node 20+)
 
 const CLIENT_NAME = 'Jellyfin Wrapped';
 const DEVICE_NAME = 'Web Browser';

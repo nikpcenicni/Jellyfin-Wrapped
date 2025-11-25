@@ -6,6 +6,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY next.config.js postcss.config.js tailwind.config.js tsconfig.json ./
 COPY app/ ./app/
+COPY messages/ ./messages/
 COPY public/ ./public/
 RUN npm install
 RUN npm run build

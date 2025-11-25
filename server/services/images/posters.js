@@ -1,6 +1,6 @@
 const config = require('../../config');
 const { getItemDetails, getShowIdFromEpisode } = require('../jellyfin/items');
-const fetch = globalThis.fetch || require('node-fetch');
+// Using native fetch (available in Node 20+)
 
 /**
  * Get poster URL using ItemId directly

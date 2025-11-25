@@ -1,0 +1,73 @@
+{
+  "common": {
+    "loading": "Chargement de votre récapitulatif de l'année...",
+    "error": "Erreur",
+    "welcome": "Bienvenue, {name}",
+    "logout": "Déconnexion",
+    "logoutConfirm": "Êtes-vous sûr de vouloir vous déconnecter ?",
+    "login": "Connexion",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "save": "Enregistrer",
+    "year": "Année",
+    "hours": "heures",
+    "plays": "lectures",
+    "items": "éléments"
+  },
+  "home": {
+    "title": "Jellyfin Wrapped",
+    "serverStats": "Statistiques du serveur pour {year}",
+    "personalStats": "Statistiques de {name} pour {year}",
+    "errorLoading": "Erreur lors du chargement des statistiques",
+    "global": "Global",
+    "personal": "Personnel"
+  },
+  "stats": {
+    "totalWatchTime": "Temps de visionnage total",
+    "totalHours": "Total d'heures",
+    "totalPlays": "Total de lectures",
+    "uniqueItems": "Éléments uniques",
+    "topMovies": "Films les plus regardés",
+    "topShows": "Séries les plus regardées",
+    "moviesVsShows": "Films vs Séries",
+    "movies": "Films",
+    "tvShows": "Séries TV",
+    "winner": "Gagnant",
+    "topGenres": "Genres les plus populaires",
+    "mostPopularMovieYears": "Années de films les plus populaires",
+    "monthlyActivity": "Activité mensuelle",
+    "yourRanking": "Votre classement",
+    "allMedia": "Tous les médias",
+    "rank": "Rang",
+    "yourWatchTime": "Votre temps de visionnage"
+  },
+  "login": {
+    "title": "Se connecter à Jellyfin",
+    "loginForPersonalized": "Se connecter pour des statistiques personnalisées",
+    "usernamePassword": "Nom d'utilisateur et mot de passe",
+    "quickConnect": "Connexion rapide",
+    "username": "Nom d'utilisateur",
+    "password": "Mot de passe",
+    "enterUsername": "Entrez votre nom d'utilisateur",
+    "enterPassword": "Entrez votre mot de passe",
+    "loggingIn": "Connexion en cours...",
+    "loginFailed": "Échec de la connexion. Veuillez vérifier vos identifiants.",
+    "quickConnectDescription": "La connexion rapide vous permet de vous connecter en approuvant la connexion sur votre application Jellyfin.",
+    "getCode": "Obtenir le code de connexion rapide",
+    "generatingCode": "Génération du code...",
+    "enterCode": "Entrez ce code dans votre application Jellyfin pour approuver la connexion :",
+    "waitingApproval": "En attente d'approbation...",
+    "codeExpired": "Le code de connexion rapide a expiré. Veuillez réessayer.",
+    "timeout": "La connexion rapide a expiré. Veuillez réessayer.",
+    "failedToGetCode": "Échec de l'obtention du code de connexion rapide",
+    "failedToInitiate": "Échec de l'initiation de la connexion rapide",
+    "authenticationFailed": "Échec de l'authentification"
+  },
+  "reveal": {
+    "message1": "Wow, il y a eu beaucoup de médias consommés cette année !",
+    "message2": "Tout le monde a consommé {hours}",
+    "message3": "C'est {plays} lectures au total",
+    "message4": "De {items} éléments uniques"
+  }
+}
+

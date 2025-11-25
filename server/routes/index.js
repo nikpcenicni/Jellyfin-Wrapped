@@ -19,7 +19,7 @@ const {
   TOP_ITEMS_LIMIT
 } = require('../utils/queryBuilders');
 
-const fetch = globalThis.fetch || require('node-fetch');
+// Using native fetch (available in Node 20+)
 
 // Constants
 const VALID_USE_CASES = ['global', 'server', 'personal', 'user', 'family'];

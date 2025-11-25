@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import axios from 'axios'
 
 type LoginMethod = 'username' | 'quick-connect'
@@ -16,7 +17,9 @@ interface AuthResponse {
 }
 
 export default function LoginButton() {
+  const t = useTranslations()
   const [showModal, setShowModal] = useState(false)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [loginMethod, setLoginMethod] = useState<LoginMethod>('username')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [userName, setUserName] = useState<string | null>(null)
@@ -66,6 +69,14 @@ export default function LoginButton() {
       window.location.reload()
     }
   }
+
+  const confirmLogout = () => {
+    setShowLogoutConfirm(true)
+  }
+
+  const cancelLogout = () => {
+    setShowLogoutConfirm(false)
+  }
   
   // Username/password form state
   const [username, setUsername] = useState('')
@@ -109,7 +120,7 @@ export default function LoginButton() {
         window.location.reload()
       }, 100)
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed. Please check your credentials.')
+      setError(err.response?.data?.error || t('login.loginFailed'))
       setLoading(false)
     }
   }
@@ -131,11 +142,11 @@ export default function LoginButton() {
         // Start polling for authentication
         startPolling(response.data.Secret)
       } else {
-        setQuickConnectError('Failed to get Quick Connect code')
+          setQuickConnectError(t('login.failedToGetCode'))
         setQuickConnectLoading(false)
       }
     } catch (err: any) {
-      setQuickConnectError(err.response?.data?.error || 'Failed to initiate Quick Connect')
+      setQuickConnectError(err.response?.data?.error || t('login.failedToInitiate'))
       setQuickConnectLoading(false)
     }
   }
@@ -179,14 +190,14 @@ export default function LoginButton() {
               window.location.reload()
             }, 100)
           } catch (authErr: any) {
-            setQuickConnectError(authErr.response?.data?.error || 'Authentication failed')
+            setQuickConnectError(authErr.response?.data?.error || t('login.authenticationFailed'))
             clearInterval(interval)
             setPollingInterval(null)
           }
         } else if (response.data?.Expired) {
           clearInterval(interval)
           setPollingInterval(null)
-          setQuickConnectError('Quick Connect code has expired. Please try again.')
+          setQuickConnectError(t('login.codeExpired'))
           setQuickConnectCode(null)
           setQuickConnectSecret(null)
         }
@@ -204,7 +215,7 @@ export default function LoginButton() {
         clearInterval(interval)
         setPollingInterval(null)
         if (quickConnectCode) {
-          setQuickConnectError('Quick Connect timed out. Please try again.')
+          setQuickConnectError(t('login.timeout'))
           setQuickConnectCode(null)
           setQuickConnectSecret(null)
         }
@@ -231,21 +242,33 @@ export default function LoginButton() {
   return (
     <>
       {isAuthenticated ? (
-        <div className="flex items-center gap-3">
-          <span className="text-gray-300 text-sm hidden sm:inline">Welcome, {userName}</span>
-          <button
-            onClick={handleLogout}
-            className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors"
+        <button
+          onClick={confirmLogout}
+          className="p-2 bg-gray-800/80 hover:bg-gray-700/80 text-gray-300 hover:text-white rounded-lg border border-gray-700 hover:border-red-500/50 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+          aria-label={t('common.logout')}
+          title={t('common.logout')}
+        >
+          <svg 
+            className="w-5 h-5" 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
           >
-            Logout
-          </button>
-        </div>
+            <path 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+              strokeWidth={2} 
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" 
+            />
+          </svg>
+        </button>
       ) : (
         <button
           onClick={() => setShowModal(true)}
           className="px-6 py-2 bg-jellyfin-blue hover:bg-jellyfin-blue/80 text-white font-semibold rounded-lg transition-colors"
         >
-          Login for Personalized Stats
+          {t('login.loginForPersonalized')}
         </button>
       )}
 
@@ -253,7 +276,7 @@ export default function LoginButton() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-xl p-8 max-w-md w-full border border-gray-700">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-white">Login to Jellyfin</h2>
+              <h2 className="text-2xl font-bold text-white">{t('login.title')}</h2>
               <button
                 onClick={handleCloseModal}
                 className="text-gray-400 hover:text-white transition-colors"
@@ -284,7 +307,7 @@ export default function LoginButton() {
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                Username & Password
+                {t('login.usernamePassword')}
               </button>
               <button
                 onClick={() => {
@@ -312,7 +335,7 @@ export default function LoginButton() {
 
                 <div>
                   <label htmlFor="username" className="block text-sm font-medium text-gray-300 mb-2">
-                    Username
+                    {t('login.username')}
                   </label>
                   <input
                     id="username"
@@ -327,7 +350,7 @@ export default function LoginButton() {
 
                 <div>
                   <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-                    Password
+                    {t('login.password')}
                   </label>
                   <input
                     id="password"
@@ -345,7 +368,7 @@ export default function LoginButton() {
                   disabled={loading}
                   className="w-full px-6 py-2 bg-jellyfin-blue hover:bg-jellyfin-blue/80 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
                 >
-                  {loading ? 'Logging in...' : 'Login'}
+                  {loading ? t('login.loggingIn') : t('common.login')}
                 </button>
               </form>
             )}
@@ -362,27 +385,27 @@ export default function LoginButton() {
                 {!quickConnectCode ? (
                   <>
                     <p className="text-gray-400 text-sm mb-4">
-                      Quick Connect allows you to log in by approving the connection on your Jellyfin app.
+                      {t('login.quickConnectDescription')}
                     </p>
                     <button
                       onClick={handleQuickConnectInitiate}
                       disabled={quickConnectLoading}
                       className="w-full px-6 py-2 bg-jellyfin-blue hover:bg-jellyfin-blue/80 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
                     >
-                      {quickConnectLoading ? 'Generating code...' : 'Get Quick Connect Code'}
+                      {quickConnectLoading ? t('login.generatingCode') : t('login.getCode')}
                     </button>
                   </>
                 ) : (
                   <div className="space-y-4">
                     <div className="bg-gray-900/50 border border-gray-700 rounded-lg p-6 text-center">
                       <p className="text-gray-400 text-sm mb-3">
-                        Enter this code in your Jellyfin app to approve the connection:
+                        {t('login.enterCode')}
                       </p>
                       <div className="text-4xl font-bold text-jellyfin-blue tracking-widest mb-3">
                         {quickConnectCode}
                       </div>
                       <p className="text-gray-500 text-xs">
-                        Waiting for approval...
+                        {t('login.waitingApproval')}
                       </p>
                     </div>
 
@@ -398,12 +421,40 @@ export default function LoginButton() {
                       }}
                       className="w-full px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors"
                     >
-                      Cancel
+                      {t('common.cancel')}
                     </button>
                   </div>
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full border border-gray-700 shadow-xl">
+            <h3 className="text-xl font-bold text-white mb-4">
+              {t('common.logout')}?
+            </h3>
+            <p className="text-gray-300 mb-6">
+              {t('common.logoutConfirm')}
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={cancelLogout}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold rounded-lg transition-colors"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-lg transition-colors"
+              >
+                {t('common.logout')}
+              </button>
+            </div>
           </div>
         </div>
       )}

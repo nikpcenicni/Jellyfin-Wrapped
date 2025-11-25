@@ -2,10 +2,14 @@
 
 import { useEffect, useState, useRef } from 'react'
 import axios from 'axios'
+import { useTranslations } from 'next-intl'
 import StatsDisplay from './components/StatsDisplay'
 import LoginButton from './components/LoginButton'
+import LanguageSelector from './components/LanguageSelector'
 // Temporarily disabled reveal sequence
 // import RevealSequence from './components/RevealSequence'
+
+export const dynamic = 'force-dynamic'
 
 interface Stats {
   year: number
@@ -32,6 +36,7 @@ interface Stats {
 }
 
 export default function Home() {
+  const t = useTranslations()
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -200,7 +205,7 @@ export default function Home() {
         return // Request was cancelled, don't update state
       }
       
-      setError(err.response?.data?.message || 'Failed to load statistics')
+      setError(err.response?.data?.message || t('home.errorLoading'))
       console.error('Error fetching stats:', err)
       setLoading(false)
     }
@@ -226,48 +231,67 @@ export default function Home() {
 
       <div className="container mx-auto px-3 md:px-4 py-4 md:py-8 max-w-7xl relative z-10">
         {/* Header - Mobile Optimized */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-12 gap-4">
-          <div className="w-full md:w-auto">
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold text-white mb-2 md:mb-3 bg-gradient-to-r from-white via-jellyfin-blue to-white bg-clip-text text-transparent">
-              Jellyfin Wrapped
+        <div className="mb-6 md:mb-12 space-y-4">
+          {/* Title Row - Jellyfin Wrapped with Language/Logout */}
+          <div className="flex items-center justify-between gap-4">
+            <h1 className="text-3xl md:text-4xl lg:text-6xl font-bold text-white bg-gradient-to-r from-white via-jellyfin-blue to-white bg-clip-text text-transparent">
+              {t('home.title')}
             </h1>
-            <p className="text-gray-400 text-base md:text-xl font-light">
-              {isAuthenticated && userName && showPersonalized
-                ? `${userName}'s Statistics for ${year}`
-                : `Server Statistics for ${year}`}
-            </p>
+            <div className="flex flex-col items-end gap-2">
+              <LanguageSelector />
+              {isAuthenticated && <LoginButton />}
+            </div>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-            {isAuthenticated && (
-              <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-800/80 backdrop-blur-sm rounded-xl border border-gray-700">
-                <span className="text-gray-400 text-xs md:text-sm whitespace-nowrap">Global</span>
-                <button
-                  onClick={() => setShowPersonalized(!showPersonalized)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-jellyfin-blue focus:ring-offset-2 focus:ring-offset-gray-800 ${
-                    showPersonalized ? 'bg-jellyfin-blue' : 'bg-gray-600'
-                  }`}
-                  role="switch"
-                  aria-checked={showPersonalized}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      showPersonalized ? 'translate-x-6' : 'translate-x-1'
+
+          {/* Subtitle Row - Statistics with Global/Personal and Year */}
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-gray-400 text-base md:text-lg lg:text-xl font-light">
+              {isAuthenticated && userName && showPersonalized
+                ? t('home.personalStats', { name: userName, year })
+                : t('home.serverStats', { year })}
+            </p>
+            <div className="flex items-center gap-3 md:gap-6 flex-shrink-0">
+              {isAuthenticated && (
+                <div className="flex items-center gap-2.5 px-3 py-2 bg-gray-800/80 backdrop-blur-sm rounded-xl border border-gray-700/50 shadow-lg">
+                  <span className={`text-xs md:text-sm font-semibold transition-colors whitespace-nowrap ${
+                    !showPersonalized ? 'text-jellyfin-blue' : 'text-gray-400'
+                  }`}>
+                    {t('home.global')}
+                  </span>
+                  <button
+                    onClick={() => setShowPersonalized(!showPersonalized)}
+                    className={`relative inline-flex h-7 w-12 md:h-8 md:w-14 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-jellyfin-blue focus:ring-offset-2 focus:ring-offset-gray-800 shadow-inner ${
+                      showPersonalized 
+                        ? 'bg-gradient-to-r from-jellyfin-blue to-blue-500' 
+                        : 'bg-gray-600/60'
                     }`}
-                  />
-                </button>
-                <span className="text-gray-400 text-xs md:text-sm whitespace-nowrap">Personal</span>
-              </div>
-            )}
-            <select
-              value={year}
-              onChange={(e) => setYear(parseInt(e.target.value))}
-              className="px-4 py-2.5 bg-gray-800/80 backdrop-blur-sm text-white rounded-xl border border-gray-700 hover:border-jellyfin-blue focus:outline-none focus:ring-2 focus:ring-jellyfin-blue transition-smooth cursor-pointer text-sm md:text-base"
-            >
-              {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-            <LoginButton />
+                    role="switch"
+                    aria-checked={showPersonalized}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 md:h-6 md:w-6 transform rounded-full bg-white shadow-lg transition-all duration-300 ${
+                        showPersonalized ? 'translate-x-6 md:translate-x-7' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                  <span className={`text-xs md:text-sm font-semibold transition-colors whitespace-nowrap ${
+                    showPersonalized ? 'text-jellyfin-blue' : 'text-gray-400'
+                  }`}>
+                    {t('home.personal')}
+                  </span>
+                </div>
+              )}
+              <select
+                value={year}
+                onChange={(e) => setYear(parseInt(e.target.value))}
+                className="px-4 py-2.5 bg-gray-800/80 backdrop-blur-sm text-white rounded-xl border border-gray-700 hover:border-jellyfin-blue focus:outline-none focus:ring-2 focus:ring-jellyfin-blue transition-smooth cursor-pointer text-sm md:text-base shadow-lg"
+              >
+                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              {!isAuthenticated && <LoginButton />}
+            </div>
           </div>
         </div>
 
@@ -275,7 +299,7 @@ export default function Home() {
         {error && (
           <div className="bg-red-900/30 backdrop-blur-sm border border-red-700/50 text-red-200 px-4 md:px-6 py-4 rounded-xl mb-6 shadow-lg shadow-red-900/20 text-sm md:text-base">
             <h3 className="font-semibold mb-2 flex items-center gap-2">
-              <span>⚠️</span> Error Loading Statistics
+              <span>⚠️</span> {t('home.errorLoading')}
             </h3>
             <p>{error}</p>
           </div>
@@ -287,7 +311,7 @@ export default function Home() {
             <div className="relative">
               <div className="animate-spin rounded-full h-16 w-16 md:h-20 md:w-20 border-4 border-gray-700 border-t-jellyfin-blue"></div>
             </div>
-            <p className="mt-6 text-gray-400 text-base md:text-lg">Loading your year in review...</p>
+            <p className="mt-6 text-gray-400 text-base md:text-lg">{t('common.loading')}</p>
           </div>
         )}
 

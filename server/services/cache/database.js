@@ -1,4 +1,4 @@
-const sqlite3 = require('sqlite3').verbose();
+const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
@@ -17,49 +17,33 @@ let db = null;
  */
 function initDatabase() {
   return new Promise((resolve, reject) => {
-    db = new sqlite3.Database(DB_PATH, (err) => {
-      if (err) {
-        console.error('[Cache DB] Error opening database:', err);
-        reject(err);
-        return;
-      }
+    try {
+      db = new Database(DB_PATH);
       console.log('[Cache DB] Connected to SQLite database');
       
       // Create tables
-      db.serialize(() => {
-        db.run(`
-          CREATE TABLE IF NOT EXISTS stats_cache (
-            cache_key TEXT PRIMARY KEY,
-            stat_type TEXT NOT NULL,
-            year INTEGER NOT NULL,
-            user_id TEXT,
-            data TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            expires_at INTEGER NOT NULL
-          )
-        `, (err) => {
-          if (err) {
-            console.error('[Cache DB] Error creating table:', err);
-            reject(err);
-            return;
-          }
-          
-          // Create indexes
-          db.run(`
-            CREATE INDEX IF NOT EXISTS idx_stat_type_year 
-            ON stats_cache(stat_type, year, user_id)
-          `, (err) => {
-            if (err) {
-              console.error('[Cache DB] Error creating index:', err);
-            }
-            
-            // Clean up expired entries
-            cleanupExpiredEntries();
-            resolve();
-          });
-        });
-      });
-    });
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS stats_cache (
+          cache_key TEXT PRIMARY KEY,
+          stat_type TEXT NOT NULL,
+          year INTEGER NOT NULL,
+          user_id TEXT,
+          data TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          expires_at INTEGER NOT NULL
+        );
+        
+        CREATE INDEX IF NOT EXISTS idx_stat_type_year 
+        ON stats_cache(stat_type, year, user_id);
+      `);
+      
+      // Clean up expired entries
+      cleanupExpiredEntries();
+      resolve();
+    } catch (err) {
+      console.error('[Cache DB] Error initializing database:', err);
+      reject(err);
+    }
   });
 }
 
@@ -80,32 +64,28 @@ function getCache(statType, year, userId = null) {
       return;
     }
     
-    const cacheKey = getCacheKey(statType, year, userId);
-    const now = Date.now();
-    
-    db.get(
-      'SELECT data, expires_at FROM stats_cache WHERE cache_key = ? AND expires_at > ?',
-      [cacheKey, now],
-      (err, row) => {
-        if (err) {
-          console.error('[Cache DB] Error reading cache:', err);
-          resolve(null);
-          return;
-        }
-        
-        if (row) {
-          try {
-            const data = JSON.parse(row.data);
-            resolve(data);
-          } catch (parseErr) {
-            console.error('[Cache DB] Error parsing cached data:', parseErr);
-            resolve(null);
-          }
-        } else {
+    try {
+      const cacheKey = getCacheKey(statType, year, userId);
+      const now = Date.now();
+      
+      const stmt = db.prepare('SELECT data, expires_at FROM stats_cache WHERE cache_key = ? AND expires_at > ?');
+      const row = stmt.get(cacheKey, now);
+      
+      if (row) {
+        try {
+          const data = JSON.parse(row.data);
+          resolve(data);
+        } catch (parseErr) {
+          console.error('[Cache DB] Error parsing cached data:', parseErr);
           resolve(null);
         }
+      } else {
+        resolve(null);
       }
-    );
+    } catch (err) {
+      console.error('[Cache DB] Error reading cache:', err);
+      resolve(null);
+    }
   });
 }
 
@@ -119,24 +99,23 @@ function setCache(statType, year, data, userId = null, ttlDays = 30) {
       return;
     }
     
-    const cacheKey = getCacheKey(statType, year, userId);
-    const now = Date.now();
-    const expiresAt = now + (ttlDays * 24 * 60 * 60 * 1000);
-    const dataStr = JSON.stringify(data);
-    
-    db.run(
-      `INSERT OR REPLACE INTO stats_cache (cache_key, stat_type, year, user_id, data, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [cacheKey, statType, year, userId, dataStr, now, expiresAt],
-      (err) => {
-        if (err) {
-          console.error('[Cache DB] Error writing cache:', err);
-          reject(err);
-          return;
-        }
-        resolve();
-      }
-    );
+    try {
+      const cacheKey = getCacheKey(statType, year, userId);
+      const now = Date.now();
+      const expiresAt = now + (ttlDays * 24 * 60 * 60 * 1000);
+      const dataStr = JSON.stringify(data);
+      
+      const stmt = db.prepare(`
+        INSERT OR REPLACE INTO stats_cache (cache_key, stat_type, year, user_id, data, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      stmt.run(cacheKey, statType, year, userId, dataStr, now, expiresAt);
+      resolve();
+    } catch (err) {
+      console.error('[Cache DB] Error writing cache:', err);
+      reject(err);
+    }
   });
 }
 
@@ -150,20 +129,15 @@ function invalidateCache(statType, year, userId = null) {
       return;
     }
     
-    const cacheKey = getCacheKey(statType, year, userId);
-    
-    db.run(
-      'DELETE FROM stats_cache WHERE cache_key = ?',
-      [cacheKey],
-      (err) => {
-        if (err) {
-          console.error('[Cache DB] Error invalidating cache:', err);
-          reject(err);
-          return;
-        }
-        resolve();
-      }
-    );
+    try {
+      const cacheKey = getCacheKey(statType, year, userId);
+      const stmt = db.prepare('DELETE FROM stats_cache WHERE cache_key = ?');
+      stmt.run(cacheKey);
+      resolve();
+    } catch (err) {
+      console.error('[Cache DB] Error invalidating cache:', err);
+      reject(err);
+    }
   });
 }
 
@@ -173,22 +147,17 @@ function invalidateCache(statType, year, userId = null) {
 function cleanupExpiredEntries() {
   if (!db) return;
   
-  const now = Date.now();
-  db.run(
-    'DELETE FROM stats_cache WHERE expires_at <= ?',
-    [now],
-    (err) => {
-      if (err) {
-        console.error('[Cache DB] Error cleaning up expired entries:', err);
-      } else {
-        db.get('SELECT changes() as count', (err, row) => {
-          if (!err && row && row.count > 0) {
-            console.log(`[Cache DB] Cleaned up ${row.count} expired entries`);
-          }
-        });
-      }
+  try {
+    const now = Date.now();
+    const stmt = db.prepare('DELETE FROM stats_cache WHERE expires_at <= ?');
+    const info = stmt.run(now);
+    
+    if (info.changes > 0) {
+      console.log(`[Cache DB] Cleaned up ${info.changes} expired entries`);
     }
-  );
+  } catch (err) {
+    console.error('[Cache DB] Error cleaning up expired entries:', err);
+  }
 }
 
 /**
@@ -201,27 +170,26 @@ function getCacheStats() {
       return;
     }
     
-    const now = Date.now();
-    db.get(
-      `SELECT 
-        COUNT(*) as total,
-        SUM(CASE WHEN expires_at <= ? THEN 1 ELSE 0 END) as expired,
-        SUM(CASE WHEN expires_at > ? THEN 1 ELSE 0 END) as valid
-       FROM stats_cache`,
-      [now, now],
-      (err, row) => {
-        if (err) {
-          console.error('[Cache DB] Error getting cache stats:', err);
-          resolve({ total: 0, expired: 0, valid: 0 });
-          return;
-        }
-        resolve({
-          total: row.total || 0,
-          expired: row.expired || 0,
-          valid: row.valid || 0
-        });
-      }
-    );
+    try {
+      const now = Date.now();
+      const stmt = db.prepare(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN expires_at <= ? THEN 1 ELSE 0 END) as expired,
+          SUM(CASE WHEN expires_at > ? THEN 1 ELSE 0 END) as valid
+        FROM stats_cache
+      `);
+      
+      const row = stmt.get(now, now);
+      resolve({
+        total: row.total || 0,
+        expired: row.expired || 0,
+        valid: row.valid || 0
+      });
+    } catch (err) {
+      console.error('[Cache DB] Error getting cache stats:', err);
+      resolve({ total: 0, expired: 0, valid: 0 });
+    }
   });
 }
 
@@ -235,16 +203,15 @@ function closeDatabase() {
       return;
     }
     
-    db.close((err) => {
-      if (err) {
-        console.error('[Cache DB] Error closing database:', err);
-        reject(err);
-        return;
-      }
+    try {
+      db.close();
       console.log('[Cache DB] Database connection closed');
       db = null;
       resolve();
-    });
+    } catch (err) {
+      console.error('[Cache DB] Error closing database:', err);
+      reject(err);
+    }
   });
 }
 
@@ -260,4 +227,3 @@ module.exports = {
   getCacheStats,
   closeDatabase
 };
-

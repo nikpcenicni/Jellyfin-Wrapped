@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import axios from 'axios'
 import { formatHours } from './utils'
 
@@ -38,6 +39,7 @@ interface UserRankingProps {
 }
 
 export default function UserRanking({ year, userId }: UserRankingProps) {
+  const t = useTranslations()
   const [rankingData, setRankingData] = useState<RankingData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -105,19 +107,19 @@ export default function UserRanking({ year, userId }: UserRankingProps) {
 
   const rankings = [
     {
-      title: 'All Media',
+      title: t('stats.allMedia'),
       icon: '🎬',
       data: rankingData.allMedia,
       color: 'jellyfin-blue'
     },
     {
-      title: 'Movies',
+      title: t('stats.movies'),
       icon: '🎥',
       data: rankingData.movies,
       color: 'blue'
     },
     {
-      title: 'TV Shows',
+      title: t('stats.tvShows'),
       icon: '📺',
       data: rankingData.shows,
       color: 'purple'
@@ -128,7 +130,7 @@ export default function UserRanking({ year, userId }: UserRankingProps) {
     <div className="bg-gray-800/60 backdrop-blur-sm rounded-xl md:rounded-2xl p-4 md:p-8 border border-gray-700/50 shadow-xl">
       <h2 className="text-2xl md:text-3xl font-bold text-white mb-4 md:mb-8 flex items-center gap-2 md:gap-3">
         <span className="text-3xl md:text-4xl">🏆</span>
-        Your Ranking
+        {t('stats.yourRanking')}
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
         {rankings.map((ranking) => (
@@ -144,14 +146,14 @@ export default function UserRanking({ year, userId }: UserRankingProps) {
             </div>
             <div className="space-y-3">
               <div>
-                <div className="text-gray-400 text-xs md:text-sm mb-1">Rank</div>
+                <div className="text-gray-400 text-xs md:text-sm mb-1">{t('stats.rank')}</div>
                 <div className={`inline-block px-3 py-1 rounded-full text-sm md:text-base font-semibold text-white ${getRankBadgeColor(ranking.data.rank, ranking.data.totalUsers)}`}>
                   {getRankDisplay(ranking.data.rank, ranking.data.totalUsers)}
                 </div>
               </div>
               {ranking.data.stats && (
                 <div>
-                  <div className="text-gray-400 text-xs md:text-sm mb-1">Your Watch Time</div>
+                  <div className="text-gray-400 text-xs md:text-sm mb-1">{t('stats.yourWatchTime')}</div>
                   <div className="text-lg md:text-xl font-bold text-white">
                     {formatHours(ranking.data.stats.totalHours)}
                   </div>
