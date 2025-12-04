@@ -1,5 +1,5 @@
 const config = require('../config');
-const { executeQuery, executeQueryForUser } = require('../services/jellyfin/queries');
+const { executeQuery } = require('../services/jellyfin/queries');
 const { enrichItemsWithPosters } = require('../services/images/posters');
 const { generateWrappedInsights } = require('../services/ai/openai');
 const { getItemDetails } = require('../services/jellyfin/items');
@@ -98,9 +98,22 @@ const isYearLocked = (year) => {
 
 const handleError = (res, error, defaultMessage, statusCode = 500) => {
   console.error(defaultMessage, error);
-  res.status(statusCode).json({
+  
+  // Use the error's status code if available (for API errors like 403, 401)
+  const finalStatusCode = error.statusCode || statusCode;
+  
+  // For authentication/authorization errors, provide more helpful messages
+  if (finalStatusCode === 403 || finalStatusCode === 401) {
+    return res.status(finalStatusCode).json({
+      error: error.message || defaultMessage,
+      message: error.message || 'Authentication or authorization failed. Please try logging out and logging back in.',
+      requiresReauth: true
+    });
+  }
+  
+  res.status(finalStatusCode).json({
     error: defaultMessage,
-    message: error.message
+    message: error.message || error.toString()
   });
 };
 
@@ -324,7 +337,7 @@ const handleImageProxy = async (req, res) => {
 };
 
 // Individual stat fetching functions with caching
-const fetchStatWithCache = async (statType, year, userId, accessToken, fetchFn) => {
+const fetchStatWithCache = async (statType, year, userId, fetchFn) => {
   // Check cache first
   const cached = await getCache(statType, year, userId);
   if (cached) {
@@ -343,56 +356,41 @@ const fetchStatWithCache = async (statType, year, userId, accessToken, fetchFn) 
   return data;
 };
 
-const fetchTotalWatchTime = async (year, userId = null, accessToken = null) => {
+const fetchTotalWatchTime = async (year, userId = null) => {
   const query = buildTotalWatchTimeQuery(year, userId);
-  const executeFn = accessToken 
-    ? () => executeQueryForUser(query, accessToken)
-    : () => executeQuery(query, true);
-  
-  const response = await executeFn();
+  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
+  const response = await executeQuery(query, !userId);
   return transformToObjects(response);
 };
 
-const fetchMonthlyActivity = async (year, userId = null, accessToken = null) => {
+const fetchMonthlyActivity = async (year, userId = null) => {
   const query = buildMonthlyActivityQuery(year, userId);
-  const executeFn = accessToken 
-    ? () => executeQueryForUser(query, accessToken)
-    : () => executeQuery(query, true);
-  
-  const response = await executeFn();
+  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
+  const response = await executeQuery(query, !userId);
   return transformToObjects(response);
 };
 
-const fetchTopMovies = async (year, userId = null, accessToken = null) => {
+const fetchTopMovies = async (year, userId = null) => {
   const query = buildTopMoviesQuery(year, userId);
-  const executeFn = accessToken 
-    ? () => executeQueryForUser(query, accessToken)
-    : () => executeQuery(query, true);
-  
-  const response = await executeFn();
+  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
+  const response = await executeQuery(query, !userId);
   let movies = transformToObjects(response);
   return await enrichItemsWithPosters(movies);
 };
 
-const fetchTopShows = async (year, userId = null, accessToken = null) => {
+const fetchTopShows = async (year, userId = null) => {
   const query = buildTopShowsQuery(year, userId);
-  const executeFn = accessToken 
-    ? () => executeQueryForUser(query, accessToken)
-    : () => executeQuery(query, true);
-  
-  const response = await executeFn();
+  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
+  const response = await executeQuery(query, !userId);
   let shows = transformToObjects(response);
   shows = deduplicateShows(shows).slice(0, TOP_ITEMS_LIMIT);
   return await enrichItemsWithPosters(shows);
 };
 
-const fetchMediaTypeComparison = async (year, userId = null, accessToken = null) => {
+const fetchMediaTypeComparison = async (year, userId = null) => {
   const query = buildMediaTypeComparisonQuery(year, userId);
-  const executeFn = accessToken 
-    ? () => executeQueryForUser(query, accessToken)
-    : () => executeQuery(query, true);
-  
-  const response = await executeFn();
+  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
+  const response = await executeQuery(query, !userId);
   const mediaTypeComparison = transformToObjects(response);
   
   const moviesData = mediaTypeComparison.find(m => m.MediaType === 'Movies');
@@ -420,13 +418,10 @@ const fetchMediaTypeComparison = async (year, userId = null, accessToken = null)
   return { mediaTypeComparison, preferredMediaType };
 };
 
-const fetchTopGenres = async (year, userId = null, accessToken = null) => {
+const fetchTopGenres = async (year, userId = null) => {
   const query = buildTopMovieIdsForGenreAnalysisQuery(year, userId, 100);
-  const executeFn = accessToken 
-    ? () => executeQueryForUser(query, accessToken)
-    : () => executeQuery(query, true);
-  
-  const response = await executeFn();
+  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
+  const response = await executeQuery(query, !userId);
   const topMovieIdsForGenre = transformToObjects(response);
   const topGenres = await analyzeGenres(topMovieIdsForGenre).catch(err => {
     console.error('[fetchTopGenres] Error analyzing genres:', err);
@@ -436,13 +431,10 @@ const fetchTopGenres = async (year, userId = null, accessToken = null) => {
   return topGenres.length > 0 ? topGenres : null;
 };
 
-const fetchTopMovieYears = async (year, userId = null, accessToken = null) => {
+const fetchTopMovieYears = async (year, userId = null) => {
   const query = buildTopMovieIdsForYearAnalysisQuery(year, userId, 50);
-  const executeFn = accessToken 
-    ? () => executeQueryForUser(query, accessToken)
-    : () => executeQuery(query, true);
-  
-  const response = await executeFn();
+  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
+  const response = await executeQuery(query, !userId);
   const topMovieIdsForYear = transformToObjects(response);
   const topMovieYears = await analyzeMovieYears(topMovieIdsForYear).catch(err => {
     console.error('[fetchTopMovieYears] Error analyzing movie years:', err);
@@ -454,12 +446,6 @@ const fetchTopMovieYears = async (year, userId = null, accessToken = null) => {
 
 const handleUserRanking = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Authentication required. Please provide access token.' });
-    }
-
-    const accessToken = authHeader.substring(7);
     const userId = req.query.userId?.trim();
     const validation = validateAndSanitizeUserId(userId);
 
@@ -494,11 +480,11 @@ const handleUserRanking = async (req, res) => {
       shows: buildUserRankingShowsQuery(year)
     };
 
-    // Execute queries using user's access token (with ReplaceUserId: false to see actual user IDs)
+    // Execute queries using admin API key (with ReplaceUserId: false to see actual user IDs)
     const [allMediaResponse, moviesResponse, showsResponse] = await Promise.all([
-      executeQueryForUser(queries.allMedia, accessToken),
-      executeQueryForUser(queries.movies, accessToken),
-      executeQueryForUser(queries.shows, accessToken)
+      executeQuery(queries.allMedia, false),
+      executeQuery(queries.movies, false),
+      executeQuery(queries.shows, false)
     ]);
 
     const allMediaResults = transformToObjects(allMediaResponse);
@@ -567,16 +553,13 @@ const handleStatTotalWatchTime = async (req, res) => {
       });
     }
     
-    const authHeader = req.headers.authorization;
-    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
     
     const data = await fetchStatWithCache(
       'totalWatchTime',
       year,
       userId,
-      accessToken,
-      () => fetchTotalWatchTime(year, userId, accessToken)
+      () => fetchTotalWatchTime(year, userId)
     );
     
     // Fetch previous year data for comparison
@@ -587,8 +570,7 @@ const handleStatTotalWatchTime = async (req, res) => {
         'totalWatchTime',
         previousYear,
         userId,
-        accessToken,
-        () => fetchTotalWatchTime(previousYear, userId, accessToken)
+        () => fetchTotalWatchTime(previousYear, userId)
       );
     } catch (err) {
       // If previous year data doesn't exist, that's okay - just continue without comparison
@@ -623,16 +605,13 @@ const handleStatMonthlyActivity = async (req, res) => {
       });
     }
     
-    const authHeader = req.headers.authorization;
-    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
     
     const data = await fetchStatWithCache(
       'monthlyActivity',
       year,
       userId,
-      accessToken,
-      () => fetchMonthlyActivity(year, userId, accessToken)
+      () => fetchMonthlyActivity(year, userId)
     );
     
     res.json({ monthlyActivity: data });
@@ -660,16 +639,13 @@ const handleStatTopMovies = async (req, res) => {
       });
     }
     
-    const authHeader = req.headers.authorization;
-    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
     
     const data = await fetchStatWithCache(
       'topMovies',
       year,
       userId,
-      accessToken,
-      () => fetchTopMovies(year, userId, accessToken)
+      () => fetchTopMovies(year, userId)
     );
     
     res.json({ topMovies: data });
@@ -697,16 +673,13 @@ const handleStatTopShows = async (req, res) => {
       });
     }
     
-    const authHeader = req.headers.authorization;
-    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
     
     const data = await fetchStatWithCache(
       'topShows',
       year,
       userId,
-      accessToken,
-      () => fetchTopShows(year, userId, accessToken)
+      () => fetchTopShows(year, userId)
     );
     
     res.json({ topShows: data });
@@ -734,16 +707,13 @@ const handleStatMediaTypeComparison = async (req, res) => {
       });
     }
     
-    const authHeader = req.headers.authorization;
-    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
     
     const data = await fetchStatWithCache(
       'mediaTypeComparison',
       year,
       userId,
-      accessToken,
-      () => fetchMediaTypeComparison(year, userId, accessToken)
+      () => fetchMediaTypeComparison(year, userId)
     );
     
     res.json(data);
@@ -771,16 +741,13 @@ const handleStatTopGenres = async (req, res) => {
       });
     }
     
-    const authHeader = req.headers.authorization;
-    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
     
     const data = await fetchStatWithCache(
       'topGenres',
       year,
       userId,
-      accessToken,
-      () => fetchTopGenres(year, userId, accessToken)
+      () => fetchTopGenres(year, userId)
     );
     
     res.json({ topGenres: data });
@@ -808,16 +775,13 @@ const handleStatTopMovieYears = async (req, res) => {
       });
     }
     
-    const authHeader = req.headers.authorization;
-    const accessToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
     const userId = req.query.userId?.trim() || null;
     
     const data = await fetchStatWithCache(
       'topMovieYears',
       year,
       userId,
-      accessToken,
-      () => fetchTopMovieYears(year, userId, accessToken)
+      () => fetchTopMovieYears(year, userId)
     );
     
     res.json({ topMovieYears: data });
