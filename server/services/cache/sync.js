@@ -1,11 +1,22 @@
 const { invalidateCache } = require('./database');
 const config = require('../../config');
 
+// Track if scheduler is already running to prevent duplicates
+let schedulerRunning = false;
+let currentTimeout = null;
+
 /**
  * Monthly sync job - invalidates cache at the end of each month
  * This ensures fresh data is fetched at the start of the new month
  */
 function scheduleMonthlySync() {
+  // Prevent multiple schedulers from running simultaneously
+  if (schedulerRunning && currentTimeout) {
+    console.log('[Cache Sync] Scheduler already running, skipping duplicate call');
+    return;
+  }
+  
+  schedulerRunning = true;
   // Calculate time until end of current month
   const now = new Date();
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -19,12 +30,16 @@ function scheduleMonthlySync() {
   // If the delay exceeds the maximum, schedule a shorter timeout and check again
   if (timeUntilEndOfMonth > MAX_TIMEOUT) {
     // Schedule for maximum safe timeout, then reschedule
-    setTimeout(() => {
+    currentTimeout = setTimeout(() => {
+      schedulerRunning = false;
+      currentTimeout = null;
       scheduleMonthlySync(); // Reschedule to check again
     }, MAX_TIMEOUT);
   } else {
     // Safe to schedule directly
-    setTimeout(() => {
+    currentTimeout = setTimeout(() => {
+      schedulerRunning = false;
+      currentTimeout = null;
       runMonthlySync();
       
       // Schedule next month's sync
@@ -95,9 +110,6 @@ async function syncYear(year) {
     throw error;
   }
 }
-
-// Start monthly sync scheduler
-scheduleMonthlySync();
 
 module.exports = {
   scheduleMonthlySync,
