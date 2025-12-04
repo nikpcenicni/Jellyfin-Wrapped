@@ -13,13 +13,24 @@ function scheduleMonthlySync() {
 
   console.log(`[Cache Sync] Scheduled monthly sync for ${endOfMonth.toISOString()}`);
 
-  // Set timeout for end of month
-  setTimeout(() => {
-    runMonthlySync();
-    
-    // Schedule next month's sync
-    scheduleMonthlySync();
-  }, timeUntilEndOfMonth);
+  // Maximum safe timeout value (2^31 - 1 milliseconds, ~24.8 days)
+  const MAX_TIMEOUT = 2147483647;
+
+  // If the delay exceeds the maximum, schedule a shorter timeout and check again
+  if (timeUntilEndOfMonth > MAX_TIMEOUT) {
+    // Schedule for maximum safe timeout, then reschedule
+    setTimeout(() => {
+      scheduleMonthlySync(); // Reschedule to check again
+    }, MAX_TIMEOUT);
+  } else {
+    // Safe to schedule directly
+    setTimeout(() => {
+      runMonthlySync();
+      
+      // Schedule next month's sync
+      scheduleMonthlySync();
+    }, timeUntilEndOfMonth);
+  }
 }
 
 /**
