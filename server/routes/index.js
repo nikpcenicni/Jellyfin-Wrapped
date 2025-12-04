@@ -358,30 +358,30 @@ const fetchStatWithCache = async (statType, year, userId, fetchFn) => {
 
 const fetchTotalWatchTime = async (year, userId = null) => {
   const query = buildTotalWatchTimeQuery(year, userId);
-  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
-  const response = await executeQuery(query, !userId);
+  // Always use admin API key. replaceUserId=false to see actual user IDs (needed for proper aggregation)
+  const response = await executeQuery(query, false);
   return transformToObjects(response);
 };
 
 const fetchMonthlyActivity = async (year, userId = null) => {
   const query = buildMonthlyActivityQuery(year, userId);
-  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
-  const response = await executeQuery(query, !userId);
+  // Always use admin API key. replaceUserId=false to see actual user IDs (needed for proper aggregation)
+  const response = await executeQuery(query, false);
   return transformToObjects(response);
 };
 
 const fetchTopMovies = async (year, userId = null) => {
   const query = buildTopMoviesQuery(year, userId);
-  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
-  const response = await executeQuery(query, !userId);
+  // Always use admin API key. replaceUserId=false to see actual user IDs (needed for proper aggregation)
+  const response = await executeQuery(query, false);
   let movies = transformToObjects(response);
   return await enrichItemsWithPosters(movies);
 };
 
 const fetchTopShows = async (year, userId = null) => {
   const query = buildTopShowsQuery(year, userId);
-  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
-  const response = await executeQuery(query, !userId);
+  // Always use admin API key. replaceUserId=false to see actual user IDs (needed for proper aggregation)
+  const response = await executeQuery(query, false);
   let shows = transformToObjects(response);
   shows = deduplicateShows(shows).slice(0, TOP_ITEMS_LIMIT);
   return await enrichItemsWithPosters(shows);
@@ -389,8 +389,8 @@ const fetchTopShows = async (year, userId = null) => {
 
 const fetchMediaTypeComparison = async (year, userId = null) => {
   const query = buildMediaTypeComparisonQuery(year, userId);
-  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
-  const response = await executeQuery(query, !userId);
+  // Always use admin API key. replaceUserId=false to see actual user IDs (needed for proper aggregation)
+  const response = await executeQuery(query, false);
   const mediaTypeComparison = transformToObjects(response);
   
   const moviesData = mediaTypeComparison.find(m => m.MediaType === 'Movies');
@@ -420,8 +420,8 @@ const fetchMediaTypeComparison = async (year, userId = null) => {
 
 const fetchTopGenres = async (year, userId = null) => {
   const query = buildTopMovieIdsForGenreAnalysisQuery(year, userId, 100);
-  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
-  const response = await executeQuery(query, !userId);
+  // Always use admin API key. replaceUserId=false to see actual user IDs (needed for proper aggregation)
+  const response = await executeQuery(query, false);
   const topMovieIdsForGenre = transformToObjects(response);
   const topGenres = await analyzeGenres(topMovieIdsForGenre).catch(err => {
     console.error('[fetchTopGenres] Error analyzing genres:', err);
@@ -433,8 +433,8 @@ const fetchTopGenres = async (year, userId = null) => {
 
 const fetchTopMovieYears = async (year, userId = null) => {
   const query = buildTopMovieIdsForYearAnalysisQuery(year, userId, 50);
-  // Always use admin API key. Use replaceUserId=false when filtering by userId to see actual user IDs
-  const response = await executeQuery(query, !userId);
+  // Always use admin API key. replaceUserId=false to see actual user IDs (needed for proper aggregation)
+  const response = await executeQuery(query, false);
   const topMovieIdsForYear = transformToObjects(response);
   const topMovieYears = await analyzeMovieYears(topMovieIdsForYear).catch(err => {
     console.error('[fetchTopMovieYears] Error analyzing movie years:', err);
